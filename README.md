@@ -22,10 +22,10 @@ Video orientation assumes the phone is held upright (portrait).
 
 ## Install
 
-1. Download `BCam.apk` from the latest **Release** of this repo and install it (allow "install unknown apps").
+1. Download `BCam-<version>.apk` (e.g. `BCam-1.0.apk`) from the latest **Release** of this repo and install it (allow "install unknown apps").
 2. Tap the BCam icon once and allow **Camera**, **Microphone** and **Notifications**.
 3. On Xiaomi / Samsung / Huawei etc. set BCam battery usage to **Unrestricted** so long recordings are not killed.
 
 ## Build
 
-Every push to `main` builds the APK with GitHub Actions and publishes it as a release. Locally: `./gradlew assembleRelease` (shrunk APK) (JDK 17 + Android SDK).
+Every push to `main` builds the APK with GitHub Actions and publishes it as a release named "BCam <version>" (1.0, 1.1, 1.2 …, one decimal place) with release notes listing the changes since the previous release. To jump to a new number (e.g. 2.0), run the workflow by hand from the Actions tab and type the version. Locally: `./gradlew assembleRelease` (shrunk APK) (JDK 17 + Android SDK).
