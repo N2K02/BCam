@@ -76,12 +76,13 @@ class RecordService : Service() {
     private inner class Output(val uri: Uri?, val file: File?, val pfd: ParcelFileDescriptor?) {
         fun finish(keep: Boolean) {
             try { pfd?.close() } catch (_: Exception) {}
-            if (uri != null) {
+            val u: Uri? = uri
+            if (u != null) {
                 if (keep) {
                     val v = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
-                    runCatching { contentResolver.update(uri, v, null, null) }
+                    runCatching { contentResolver.update(u, v, null, null) }
                 } else {
-                    runCatching { contentResolver.delete(uri, null, null) }
+                    runCatching { contentResolver.delete(u, null, null) }
                 }
             } else if (file != null && !keep) {
                 file.delete()
