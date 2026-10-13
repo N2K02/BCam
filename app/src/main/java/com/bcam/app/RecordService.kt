@@ -317,11 +317,11 @@ class RecordService : Service() {
             }
             if (rec != null) { usingHevc = useHevc; break }
         }
-        if (rec == null) return fail("Video encoder could not start")
-        recorder = rec
+        val mr: MediaRecorder = rec ?: return fail("Video encoder could not start")
+        recorder = mr
         recStarted = false
         val t = ++token
-        val surface = rec.surface
+        val surface = mr.surface
 
         try {
             @Suppress("DEPRECATION")
@@ -337,7 +337,7 @@ class RecordService : Service() {
                             cfg.fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }
                         s.setRepeatingRequest(req.build(), null, h)
-                        rec.start()
+                        mr.start()
                         recStarted = true
                         part++
                         partStartElapsed = SystemClock.elapsedRealtime()
