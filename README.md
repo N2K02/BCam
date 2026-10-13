@@ -28,4 +28,4 @@ Video orientation assumes the phone is held upright (portrait).
 
 ## Build
 
-Every push to `main` builds the APK with GitHub Actions and publishes it as a release. Locally: `./gradlew assembleDebug` (JDK 17 + Android SDK).
+Every push to `main` builds the APK with GitHub Actions and publishes it as a release. Locally: `./gradlew assembleRelease` (shrunk APK) (JDK 17 + Android SDK).
