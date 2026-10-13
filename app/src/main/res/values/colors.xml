@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material 3 baseline palette (used before Android 12). -->
+<resources>
+    <color name="icon_container">#EADDFF</color>
+    <color name="icon_primary">#6750A4</color>
+    <color name="icon_on_container">#21005D</color>
+    <color name="icon_rec">#E5484D</color>
+</resources>

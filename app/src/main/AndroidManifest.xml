@@ -26,7 +26,7 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:noHistory="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            android:theme="@style/Theme.BCam">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

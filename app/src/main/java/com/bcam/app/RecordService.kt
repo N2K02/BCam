@@ -207,6 +207,7 @@ class RecordService : Service() {
         val icon = Icon.createWithResource(this, R.drawable.ic_stat_rec)
         val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
+            .setColor(getColor(R.color.icon_primary))
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)

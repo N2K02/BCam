@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: Material You dynamic colors taken from the wallpaper. -->
+<resources>
+    <color name="icon_container">@android:color/system_accent1_100</color>
+    <color name="icon_primary">@android:color/system_accent1_600</color>
+    <color name="icon_on_container">@android:color/system_accent1_900</color>
+    <color name="icon_rec">#E5484D</color>
+</resources>
