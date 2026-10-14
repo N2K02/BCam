@@ -1,6 +1,12 @@
 # BCam
 
+[![Latest release](https://img.shields.io/github/v/release/N2K02/BCam?label=download)](https://github.com/N2K02/BCam/releases/latest) ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white) ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Background video recorder for Android. No screen, no preview — tap the icon and it records.
+
+*Screen-off background video recorder for Android: hidden camera recording with no preview, H.265/H.264, front and back camera.*
+
+**[⬇ Download the latest APK](https://github.com/N2K02/BCam/releases/latest)** · Android 8.0 or newer · Free and open source
 
 ## How it works
 
