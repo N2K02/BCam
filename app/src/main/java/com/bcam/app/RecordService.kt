@@ -246,14 +246,18 @@ class RecordService : Service() {
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
         // Android shows at most 3 buttons: Pause/Resume, Stop, Settings (Switch camera is in Settings).
+        // Most phones show only the button text, so each label starts with a symbol; the icon is
+        // used where Android does show it (some phones, watches).
+        fun ic(res: Int) = Icon.createWithResource(this, res)
         if (recording) {
             b.addAction(
-                Notification.Action.Builder(icon, if (paused) "▶ Resume" else "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
+                if (paused) Notification.Action.Builder(ic(R.drawable.ic_play), "▶ Resume", servicePi(ACTION_PAUSE_RESUME, 4)).build()
+                else Notification.Action.Builder(ic(R.drawable.ic_pause), "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
             )
         } else if (hasBothCameras()) {
-            b.addAction(Notification.Action.Builder(icon, "Switch to $other", servicePi(ACTION_SWITCH, 2)).build())
+            b.addAction(Notification.Action.Builder(ic(R.drawable.ic_switch), "⟲ Switch to $other", servicePi(ACTION_SWITCH, 2)).build())
         }
-        b.addAction(Notification.Action.Builder(icon, "Stop", servicePi(ACTION_STOP, 1)).build())
+        b.addAction(Notification.Action.Builder(ic(R.drawable.ic_stop), "■ Stop", servicePi(ACTION_STOP, 1)).build())
         b.addAction(
             Notification.Action.Builder(
                 Icon.createWithResource(this, R.drawable.ic_settings), "⚙ Settings", settingsPi()

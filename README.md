@@ -14,7 +14,7 @@ Background video recorder for Android. No screen, no preview — tap the icon an
 |---|---|
 | Tap the **BCam** icon | Recording starts in the background (screen closes immediately) |
 | Notification → **❚❚ Pause / ▶ Resume** | Pauses recording and continues later in the same video file |
-| Notification → **Stop** | Stops and saves the current video |
+| Notification → **■ Stop** | Stops and saves the current video |
 | Notification → **⚙ Settings** | Opens the video settings (see below); **Switch camera** is there while recording |
 | Every **30 minutes** (adjustable) | The current file is saved and a new one starts automatically, until you press Stop |
 
