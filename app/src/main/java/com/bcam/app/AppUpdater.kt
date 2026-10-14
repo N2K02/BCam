@@ -5,11 +5,9 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import org.json.JSONObject
@@ -29,7 +27,7 @@ import java.security.MessageDigest
  *   what's new, then download with progress, verify, install.
  *
  * Verified before installing: size and SHA-256 (from GitHub), same package, newer versionCode,
- * same signing key. Installed with Android's PackageInstaller; Android asks the user to confirm.
+ * same signing key. Installed through Android's own package installer screen.
  */
 object AppUpdater {
     const val REPO = "N2K02/bcam"
@@ -159,7 +157,7 @@ object AppUpdater {
 
     // ---------------------------------------------------------------- download + verify (blocking)
 
-    private fun updateDir(c: Context) = File(c.cacheDir, "update")
+    private fun updateDir(c: Context) = File(c.cacheDir, UpdateFileProvider.DIR)
 
     fun apkFile(c: Context, release: Release) =
         File(updateDir(c), release.apkName.replace(Regex("[^A-Za-z0-9._-]"), "_"))
@@ -251,37 +249,14 @@ object AppUpdater {
 
     fun canInstall(c: Context) = c.packageManager.canRequestPackageInstalls()
 
-    /** Hands the APK to Android's installer (blocking). The result arrives in [UpdateReceiver]. */
-    fun install(c: Context, file: File) {
-        val installer = c.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(c.packageName)
-            setSize(file.length())
-            if (Build.VERSION.SDK_INT >= 31) {
-                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-            }
-            if (Build.VERSION.SDK_INT >= 33) setPackageSource(PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
-        }
-        val id = installer.createSession(params)
-        installer.openSession(id).use { session ->
-            file.inputStream().use { input ->
-                session.openWrite("base.apk", 0, file.length()).use { out ->
-                    input.copyTo(out, 64 * 1024)
-                    session.fsync(out)
-                }
-            }
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-                (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
-            val pi = PendingIntent.getBroadcast(
-                c, id, Intent(c, UpdateReceiver::class.java).setPackage(c.packageName), flags,
-            )
-            session.commit(pi.intentSender)
-        }
-    }
-
-    /** Set by [UpdateActivity] to hear install results while it is open. */
-    @Volatile
-    var listener: ((status: Int, message: String?, confirm: Intent?) -> Unit)? = null
+    /**
+     * The intent that opens Android's own package installer for the downloaded APK (the same
+     * screen as tapping a downloaded APK). Play Protect, if it wants to scan, asks there.
+     */
+    fun installIntent(c: Context, file: File): Intent =
+        Intent(Intent.ACTION_VIEW)
+            .setDataAndType(UpdateFileProvider.uriFor(c, file), "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
     // ---------------------------------------------------------------- package info helpers
 
@@ -320,23 +295,5 @@ object AppUpdater {
         } ?: return emptySet()
         val md = MessageDigest.getInstance("SHA-256")
         return sigs.map { sig -> md.digest(sig.toByteArray()).joinToString("") { "%02x".format(it) } }.toSet()
-    }
-}
-
-/** Receives the result of an update install from Android's PackageInstaller. */
-class UpdateReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-        val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-        @Suppress("DEPRECATION")
-        val confirm = if (Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-        } else {
-            intent.getParcelableExtra(Intent.EXTRA_INTENT)
-        }
-        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION && confirm != null) {
-            runCatching { context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        }
-        AppUpdater.listener?.invoke(status, message, confirm)
     }
 }

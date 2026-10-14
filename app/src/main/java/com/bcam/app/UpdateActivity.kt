@@ -3,7 +3,6 @@ package com.bcam.app
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -26,11 +25,11 @@ class UpdateActivity : Activity() {
     private var release: AppUpdater.Release? = null
     private var file: File? = null
     private var waitingForPermission = false
+    private var installerOpened = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         getSystemService(android.app.NotificationManager::class.java).cancel(AppUpdater.NOTIF_ID)
-        AppUpdater.listener = { status, message, confirm -> runOnUiThread { onInstallResult(status, message, confirm) } }
         check()
     }
 
@@ -45,7 +44,6 @@ class UpdateActivity : Activity() {
 
     override fun onDestroy() {
         cancelled = true
-        AppUpdater.listener = null
         dialog?.setOnDismissListener(null)
         dialog?.dismiss()
         super.onDestroy()
@@ -57,7 +55,7 @@ class UpdateActivity : Activity() {
         switching = true
         dialog?.dismiss()
         switching = false
-        dialog = b.setOnDismissListener { if (!switching && !waitingForPermission) close() }.show()
+        dialog = b.setOnDismissListener { if (!switching && !waitingForPermission && !installerOpened) close() }.show()
     }
 
     private fun close() {
@@ -168,35 +166,39 @@ class UpdateActivity : Activity() {
     }
 
     private fun install(f: File) {
-        busy("Installing", "Installing the update. BCam will close and start on the new version.")
         val wasRecording = RecordService.isRunning
-        if (wasRecording) startService(Intent(this, RecordService::class.java).setAction(RecordService.ACTION_STOP))
-        Thread {
+        if (wasRecording) {
+            busy("Saving the recording", "Stopping the recording so the video is saved before the update…")
+            startService(Intent(this, RecordService::class.java).setAction(RecordService.ACTION_STOP))
             // Give the recorder a moment to finish writing the current video.
-            if (wasRecording) Thread.sleep(2000)
-            val err = runCatching { AppUpdater.install(this, f) }.exceptionOrNull()
-            if (err != null) runOnUiThread { error("Couldn't start the install: ${err.message ?: "unknown error"}", release) }
-        }.start()
+            window.decorView.postDelayed({ if (!isFinishing) openInstaller(f) }, 2000)
+        } else {
+            openInstaller(f)
+        }
     }
 
-    private fun onInstallResult(status: Int, message: String?, confirm: Intent?) {
-        when (status) {
-            PackageInstaller.STATUS_PENDING_USER_ACTION -> show(
-                AlertDialog.Builder(this)
-                    .setTitle("Ready to install")
-                    .setMessage("Confirm the update in Android's install window.")
-                    .setPositiveButton("Install") { _, _ ->
-                        confirm?.let { runCatching { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
-                    }
-                    .setNegativeButton("Later", null),
-            )
-            PackageInstaller.STATUS_SUCCESS -> close()
-            PackageInstaller.STATUS_FAILURE_ABORTED -> release?.let { offer(it) } ?: close()
-            PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
-                error("Android refused the update (signing key or version conflict).", release)
-            PackageInstaller.STATUS_FAILURE_STORAGE -> error("Not enough storage to install the update.", release)
-            else -> error("The install didn't finish${message?.let { ": $it" } ?: "."}", release)
+    /** Opens Android's installer; when the user comes back without installing, offers it again. */
+    private fun openInstaller(f: File) {
+        val ok = runCatching { startActivity(AppUpdater.installIntent(this, f)) }.isSuccess
+        if (!ok) {
+            error("Couldn't open Android's installer.", release)
+            return
         }
+        installerOpened = true
+        readyDialog(f)
+    }
+
+    private fun readyDialog(f: File) {
+        show(
+            AlertDialog.Builder(this)
+                .setTitle("BCam ${release?.versionName.orEmpty()} is ready to install")
+                .setMessage(
+                    "Android's installer opens. If Play Protect asks, you can scan the app or choose to install anyway. " +
+                        "BCam closes and starts on the new version.",
+                )
+                .setPositiveButton("Install") { _, _ -> openInstaller(f) }
+                .setNegativeButton("Later") { _, _ -> installerOpened = false },
+        )
     }
 
     private fun error(text: String, r: AppUpdater.Release?) {

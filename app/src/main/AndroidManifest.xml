@@ -55,10 +55,12 @@
             android:taskAffinity="com.bcam.app.update"
             android:theme="@style/Theme.BCam" />
 
-        <!-- Result of installing an app update -->
-        <receiver
-            android:name=".UpdateReceiver"
-            android:exported="false" />
+        <!-- Shares a downloaded update APK with Android's installer (read-only, not exported) -->
+        <provider
+            android:name=".UpdateFileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
         <service
             android:name=".RecordService"
