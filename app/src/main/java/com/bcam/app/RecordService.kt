@@ -47,7 +47,7 @@ import java.util.Locale
  * Foreground service that records video with no preview.
  *  - Splits automatically into parts (30 minutes by default) and keeps going until stopped.
  *  - Uses H.265/HEVC when the phone has a hardware HEVC encoder, otherwise H.264.
- *  - Notification has "Pause"/"Resume", "B/F" (switch camera) and "Stop"; tapping it opens Settings.
+ *  - Notification has "Pause"/"Resume", "Stop" and "⚙ Settings"; the camera is chosen in Settings.
  *  - Pause keeps the same file: the recorder pauses and the camera stops sending frames.
  *  - Resolution, frame rate, quality, codec, sound and part length come from [VideoSettings].
  * All camera / recorder work happens on one background thread ([h]).
@@ -67,7 +67,7 @@ class RecordService : Service() {
         private const val NOTIF_ID = 1
         private const val RETRY_MS = 3000L
         private const val PREFS = VideoSettings.PREFS
-        private const val KEY_FACING = "facing"
+        const val KEY_FACING = "facing"
 
         @Volatile
         var isRunning = false
@@ -219,7 +219,6 @@ class RecordService : Service() {
 
     private fun buildNotification(): Notification {
         val camName = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"
-        val other = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "back" else "front"
         val recording = recStarted
         val title = when {
             recording && paused -> "❚❚ Paused · $camName camera · Part $part"
@@ -235,7 +234,6 @@ class RecordService : Service() {
             else -> "$camName camera · tap for settings"
         }
 
-        val icon = Icon.createWithResource(this, R.drawable.ic_stat_rec)
         val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setColor(getColor(R.color.icon_primary))
@@ -245,8 +243,8 @@ class RecordService : Service() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-        // Android shows at most 3 buttons: Pause/Resume, B/F (switch camera), Stop.
-        // Tapping the notification itself opens Settings.
+        // Android shows at most 3 buttons: Pause/Resume, Stop, Settings (the camera is chosen in
+        // Settings). Tapping the notification opens Settings too.
         // Most phones show only the button text, so each label starts with a symbol; the icon is
         // used where Android does show it (some phones, watches).
         fun ic(res: Int) = Icon.createWithResource(this, res)
@@ -256,10 +254,8 @@ class RecordService : Service() {
                 else Notification.Action.Builder(ic(R.drawable.ic_pause), "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
             )
         }
-        if (hasBothCameras()) {
-            b.addAction(Notification.Action.Builder(ic(R.drawable.ic_switch), "⟲ B/F", servicePi(ACTION_SWITCH, 2)).build())
-        }
         b.addAction(Notification.Action.Builder(ic(R.drawable.ic_stop), "■ Stop", servicePi(ACTION_STOP, 1)).build())
+        b.addAction(Notification.Action.Builder(ic(R.drawable.ic_settings), "⚙ Settings", settingsPi()).build())
         b.setContentIntent(settingsPi())
         if (recording && !paused) {
             // Timer shows recorded time: pauses are skipped.
@@ -294,10 +290,6 @@ class RecordService : Service() {
 
     private fun facingOf(id: String) = cm.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING)
 
-    private fun hasBothCameras(): Boolean = runCatching {
-        val f = cm.cameraIdList.map { facingOf(it) }
-        CameraCharacteristics.LENS_FACING_BACK in f && CameraCharacteristics.LENS_FACING_FRONT in f
-    }.getOrDefault(false)
 
     private fun pickCamera(): String? = runCatching {
         val ids = cm.cameraIdList
@@ -577,7 +569,16 @@ class RecordService : Service() {
         settings = VideoSettings.load(this)
         h.removeCallbacks(retry)
         finishPart()
-        status = "Applying new settings…"
+        // Camera chosen in Settings: the two cameras record at different angles and sizes,
+        // so the other camera continues in a new file.
+        val wanted = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_FACING, facing)
+        status = if (wanted != facing) {
+            facing = wanted
+            closeCamera()
+            "Switching camera…"
+        } else {
+            "Applying new settings…"
+        }
         updateNotification()
         startPart()
     }

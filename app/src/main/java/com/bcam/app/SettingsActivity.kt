@@ -138,6 +138,22 @@ class SettingsActivity : Activity() {
         @Suppress("UNCHECKED_CAST")
         fun <T> Spinner.value(): T = (selectedItem as Choice<T>).value
 
+        // Back / front camera. While recording, saving a change continues with the other camera
+        // in a new file (the two cameras record at different angles and sizes).
+        val curFacing = getSharedPreferences(VideoSettings.PREFS, MODE_PRIVATE)
+            .getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)
+        val sCam = if (caps.hasBothCameras) {
+            row(
+                "Camera",
+                listOf(
+                    Choice("Back camera", CameraCharacteristics.LENS_FACING_BACK),
+                    Choice("Front camera", CameraCharacteristics.LENS_FACING_FRONT),
+                ),
+                curFacing,
+            )
+        } else {
+            null
+        }
         val sRes = row("Resolution", resChoices, cur.resolution)
         val sFps = row("Frame rate", fpsChoices, cur.fps)
         val sQuality = row("Quality", qualityChoices, cur.quality)
@@ -145,20 +161,6 @@ class SettingsActivity : Activity() {
         val sAudio = row("Sound", audioChoices, cur.audio)
         val sSeg = row("New file every", segChoices, cur.segmentMinutes)
         content.addView(estimate)
-        // While recording: switch camera here too (also "B/F" in the notification).
-        if (RecordService.isRunning) {
-            content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
-                text = "⟲  Switch camera"
-                isAllCaps = false
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setOnClickListener {
-                    startService(Intent(this@SettingsActivity, RecordService::class.java).setAction(RecordService.ACTION_SWITCH))
-                    Toast.makeText(this@SettingsActivity, "Switching camera…", Toast.LENGTH_SHORT).show()
-                }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(8)
-            })
-        }
         // Updates card: check, what's new, download and install without leaving this dialog.
         updates?.close()
         val upd = UpdateSection(this)
@@ -171,6 +173,16 @@ class SettingsActivity : Activity() {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
             upd.check()
         }
+        // Exit: stop (and save) the recording and close BCam.
+        content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
+            text = if (RecordService.isRunning) "⏻  Stop recording & exit BCam" else "⏻  Exit BCam"
+            isAllCaps = false
+            setTextColor(0xFFD93025.toInt())
+            gravity = Gravity.CENTER
+            setOnClickListener { exitApp() }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(4)
+        })
 
         read = {
             VideoSettings(
@@ -189,40 +201,72 @@ class SettingsActivity : Activity() {
             .setTitle("Video settings")
             .setView(ScrollView(this).apply { addView(content) })
             .setNegativeButton("Cancel", null)
-            .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording) }
-            .setPositiveButton(if (recording) "Save & restart" else "Save") { _, _ -> save(read(), recording) }
+            .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording, null) }
+            .setPositiveButton("Save") { _, _ -> save(read(), recording, sCam?.value<Int>()) }
             .setOnDismissListener { updates?.close(); finish(); overridePendingTransition(0, 0) }
             .show()
     }
 
-    private fun save(s: VideoSettings, recording: Boolean) {
+    private fun save(s: VideoSettings, recording: Boolean, facing: Int?) {
         val changed = s != VideoSettings.load(this)
         s.save(this)
+        val prefs = getSharedPreferences(VideoSettings.PREFS, MODE_PRIVATE)
+        val oldFacing = prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)
+        val switched = facing != null && facing != oldFacing
+        if (switched) prefs.edit().putInt(RecordService.KEY_FACING, facing!!).apply()
+        val camName = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "front" else "back"
         when {
-            !changed -> {}
+            !changed && !switched -> {}
             recording && RecordService.isRunning -> {
                 startService(Intent(this, RecordService::class.java).setAction(RecordService.ACTION_APPLY_SETTINGS))
-                Toast.makeText(this, "Saved — current file kept, new file uses the new settings", Toast.LENGTH_SHORT).show()
+                val msg = if (switched) {
+                    "Switching to the $camName camera — the video so far is saved and recording continues in a new file"
+                } else {
+                    "Saved — the video so far is kept and recording continues in a new file with the new settings"
+                }
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             }
-            else -> Toast.makeText(this, "Saved — used next time you record", Toast.LENGTH_SHORT).show()
+            else -> Toast.makeText(
+                this,
+                if (switched) "Saved — the $camName camera is used next time you record" else "Saved — used next time you record",
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
-    private class Caps(val maxHeight: Int, val has60: Boolean)
+    /** Exit BCam: stop and save the recording, close the dialog and remove BCam from recent apps. */
+    private fun exitApp() {
+        if (RecordService.isRunning) {
+            startService(Intent(this, RecordService::class.java).setAction(RecordService.ACTION_STOP))
+        }
+        getSystemService(android.app.NotificationManager::class.java).cancel(AppUpdater.NOTIF_ID)
+        updates?.close()
+        dialog?.setOnDismissListener(null)
+        dialog?.dismiss()
+        finishAndRemoveTask()
+        overridePendingTransition(0, 0)
+    }
+
+    private class Caps(val maxHeight: Int, val has60: Boolean, val hasBothCameras: Boolean)
 
     /** What the phone's cameras can record, so the dialog only offers options that work. */
     private fun cameraCaps(): Caps = runCatching {
         val cm = getSystemService(CameraManager::class.java)
         var maxH = 0
         var has60 = false
+        val facings = HashSet<Int>()
         for (id in cm.cameraIdList) {
             val c = cm.getCameraCharacteristics(id)
+            c.get(CameraCharacteristics.LENS_FACING)?.let { facings += it }
             val sizes = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 ?.getOutputSizes(MediaRecorder::class.java).orEmpty()
             sizes.forEach { maxH = maxOf(maxH, minOf(it.width, it.height)) }
             val ranges = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty()
             if (ranges.any { it.upper >= 60 }) has60 = true
         }
-        Caps(if (maxH == 0) 1080 else maxH, has60)
-    }.getOrDefault(Caps(1080, false))
+        Caps(
+            if (maxH == 0) 1080 else maxH, has60,
+            CameraCharacteristics.LENS_FACING_BACK in facings && CameraCharacteristics.LENS_FACING_FRONT in facings,
+        )
+    }.getOrDefault(Caps(1080, false, false))
 }
