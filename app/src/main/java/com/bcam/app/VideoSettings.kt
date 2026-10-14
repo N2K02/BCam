@@ -30,7 +30,7 @@ data class VideoSettings(
     }
 
     fun videoBitrate(width: Int, height: Int, fps: Int, hevc: Boolean): Int =
-        (width.toLong() * height * fps * bitsPerPixel(hevc))
+        (width.toLong() * height * fps * bitsPerPixel(hevc)).toLong()
             .coerceIn(1_000_000L, MAX_BITRATE.toLong()).toInt()
 
     /** Rough file size of one part in bytes, assuming a 16:9 picture at [resolution]. */
