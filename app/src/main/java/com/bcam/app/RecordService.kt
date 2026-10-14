@@ -45,9 +45,10 @@ import java.util.Locale
 
 /**
  * Foreground service that records video with no preview.
- *  - Splits automatically into 30-minute parts and keeps going until stopped.
+ *  - Splits automatically into parts (30 minutes by default) and keeps going until stopped.
  *  - Uses H.265/HEVC when the phone has a hardware HEVC encoder, otherwise H.264.
- *  - Notification has "Stop" and "Switch camera" buttons.
+ *  - Notification has "Stop", "Switch camera" and "⚙ Settings" buttons.
+ *  - Resolution, frame rate, quality, codec, sound and part length come from [VideoSettings].
  * All camera / recorder work happens on one background thread ([h]).
  */
 class RecordService : Service() {
@@ -57,14 +58,13 @@ class RecordService : Service() {
         const val ACTION_START = "com.bcam.app.START"
         const val ACTION_STOP = "com.bcam.app.STOP"
         const val ACTION_SWITCH = "com.bcam.app.SWITCH"
+        const val ACTION_APPLY_SETTINGS = "com.bcam.app.APPLY_SETTINGS"
 
-        const val SEGMENT_MS = 30 * 60 * 1000          // 30 minutes per file
         private const val MAX_FILE_BYTES = 3_900_000_000L // stay under the 4 GB MP4 limit
-        private const val FPS = 30
         private const val CHANNEL = "recording"
         private const val NOTIF_ID = 1
         private const val RETRY_MS = 3000L
-        private const val PREFS = "bcam"
+        private const val PREFS = VideoSettings.PREFS
         private const val KEY_FACING = "facing"
 
         @Volatile
@@ -93,6 +93,7 @@ class RecordService : Service() {
     private class Config(
         val size: Size,
         val hevc: Boolean,
+        val fps: Int,
         val fpsRange: Range<Int>?,
         val orientation: Int,
         val continuousAf: Boolean,
@@ -120,6 +121,9 @@ class RecordService : Service() {
     private var partStartElapsed = 0L
     private var partStartWall = 0L
     private var usingHevc = false
+    private var settings = VideoSettings()
+    private var activeSize: Size? = null
+    private var activeFps = 30
     private var status = "Starting…"
 
     private val retry = Runnable { if (!stopped && recorder == null) startPart() }
@@ -154,6 +158,7 @@ class RecordService : Service() {
                 h.post { shutdown(userStopped = true) }
             }
             ACTION_SWITCH -> if (isRunning) h.post { switchCamera() }
+            ACTION_APPLY_SETTINGS -> if (isRunning) h.post { applySettings() } else stopSelf()
             else -> if (!isRunning) stopSelf()
         }
         return START_NOT_STICKY
@@ -170,10 +175,11 @@ class RecordService : Service() {
     // ---------------------------------------------------------------- foreground / notification
 
     private fun has(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
-    private val withAudio get() = has(Manifest.permission.RECORD_AUDIO)
+    private val withAudio get() = has(Manifest.permission.RECORD_AUDIO) && settings.audio
 
     private fun goForeground(): Boolean {
         if (!has(Manifest.permission.CAMERA)) return false
+        settings = VideoSettings.load(this)
         return try {
             if (Build.VERSION.SDK_INT >= 29) {
                 var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
@@ -196,13 +202,23 @@ class RecordService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+    private fun settingsPi(): PendingIntent =
+        PendingIntent.getActivity(
+            this, 3,
+            Intent(this, SettingsActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
     private fun buildNotification(): Notification {
         val camName = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"
         val other = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "back" else "front"
         val recording = recStarted
         val title = if (recording) "● REC · $camName camera · Part $part" else "BCam · $status"
         val codec = if (usingHevc) "H.265" else "H.264"
-        val text = if (recording) "$codec · new file every 30 min · Movies/BCam" else "$camName camera"
+        val res = activeSize?.let { "${minOf(it.width, it.height)}p$activeFps · " } ?: ""
+        val mute = if (withAudio) "" else " · no sound"
+        val text = if (recording) "$res$codec$mute · new file every ${settings.segmentMinutes} min" else "$camName camera"
 
         val icon = Icon.createWithResource(this, R.drawable.ic_stat_rec)
         val b = Notification.Builder(this, CHANNEL)
@@ -218,6 +234,11 @@ class RecordService : Service() {
         if (hasBothCameras()) {
             b.addAction(Notification.Action.Builder(icon, "Switch to $other", servicePi(ACTION_SWITCH, 2)).build())
         }
+        b.addAction(
+            Notification.Action.Builder(
+                Icon.createWithResource(this, R.drawable.ic_settings), "⚙ Settings", settingsPi()
+            ).build()
+        )
         if (recording) {
             b.setUsesChronometer(true).setShowWhen(true).setWhen(partStartWall)
         } else {
@@ -264,28 +285,44 @@ class RecordService : Service() {
         val c = cm.getCameraCharacteristics(id)
         val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
         val sizes = map.getOutputSizes(MediaRecorder::class.java).toList()
-        val upTo1080 = sizes.filter { it.width <= 1920 && it.height <= 1080 }
-        val size = upTo1080.filter { it.width * 9 == it.height * 16 }.maxByOrNull { it.width * it.height }
-            ?: upTo1080.maxByOrNull { it.width * it.height }
+        // Sizes are landscape (e.g. 1920x1080); keep the largest one up to the chosen height, 16:9 preferred.
+        val maxH = settings.resolution
+        val maxW = maxH * 16 / 9
+        val fitting = sizes.filter { it.width <= maxW && it.height <= maxH }
+        val wanted = fitting.filter { it.width * 9 == it.height * 16 }.maxByOrNull { it.width * it.height }
+            ?: fitting.maxByOrNull { it.width * it.height }
             ?: sizes.minBy { it.width * it.height }
 
+        // Use the chosen frame rate if the camera supports it, otherwise 30 (or whatever it can do).
         val ranges = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.toList().orEmpty()
-        val fps = ranges.filter { it.upper == FPS }.maxByOrNull { it.lower }
+        val fpsRange = ranges.filter { it.upper == settings.fps }.maxByOrNull { it.lower }
+            ?: ranges.filter { it.upper == 30 }.maxByOrNull { it.lower }
+        val fps = fpsRange?.upper ?: 30
+
+        // If no hardware encoder handles that size/fps, step down to a size that one does.
+        var size = wanted
+        if (!hasHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_AVC, size, fps)) {
+            size = sizes.filter { it.width * it.height < wanted.width * wanted.height }
+                .sortedByDescending { it.width * it.height }
+                .firstOrNull { hasHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_AVC, it, fps) }
+                ?: wanted
+        }
 
         val afModes = c.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty()
         val sensor = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
 
-        val hevc = hasHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC, size)
-        return Config(size, hevc, fps, sensor, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes)
+        val hevc = settings.preferHevc && hasHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC, size, fps)
+        return Config(size, hevc, fps, fpsRange, sensor, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes)
     }
 
-    /** True if the phone has a *hardware* encoder for [mime] at [size] (software HEVC is too slow). */
-    private fun hasHardwareEncoder(mime: String, size: Size): Boolean = runCatching {
+    /** True if the phone has a *hardware* encoder for [mime] at [size] and [fps] (software encoders are too slow). */
+    private fun hasHardwareEncoder(mime: String, size: Size, fps: Int): Boolean = runCatching {
         MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
             info.isEncoder &&
                 info.supportedTypes.any { it.equals(mime, ignoreCase = true) } &&
                 isHardware(info) &&
-                info.getCapabilitiesForType(mime).videoCapabilities?.isSizeSupported(size.width, size.height) == true
+                info.getCapabilitiesForType(mime).videoCapabilities
+                    ?.areSizeAndRateSupported(size.width, size.height, fps.toDouble()) == true
         }
     }.getOrDefault(false)
 
@@ -317,7 +354,7 @@ class RecordService : Service() {
                 out?.finish(keep = false); out = null
                 null
             }
-            if (rec != null) { usingHevc = useHevc; break }
+            if (rec != null) { usingHevc = useHevc; activeSize = cfg.size; activeFps = cfg.fps; break }
         }
         val mr: MediaRecorder = rec ?: return fail("Video encoder could not start")
         recorder = mr
@@ -380,24 +417,23 @@ class RecordService : Service() {
 
             val w = cfg.size.width
             val ht = cfg.size.height
-            // Bits per pixel per frame: HEVC needs ~40% less than H.264 for the same quality.
-            // 1080p30 => ~5 Mbps HEVC (~1.1 GB / 30 min) or ~8.7 Mbps H.264.
-            val bpp = if (hevc) 0.08 else 0.14
-            val bitrate = (w.toLong() * ht * FPS * bpp).toInt().coerceAtLeast(1_000_000)
+            // Bitrate from the quality setting (bits per pixel per frame; HEVC needs ~40% less).
+            // Standard 1080p30 => ~5 Mbps HEVC (~1.1 GB / 30 min) or ~8.7 Mbps H.264.
+            val bitrate = settings.videoBitrate(w, ht, cfg.fps, hevc)
             r.setVideoEncoder(if (hevc) MediaRecorder.VideoEncoder.HEVC else MediaRecorder.VideoEncoder.H264)
             r.setVideoSize(w, ht)
-            r.setVideoFrameRate(FPS)
+            r.setVideoFrameRate(cfg.fps)
             r.setVideoEncodingBitRate(bitrate)
 
             if (audio) {
                 r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                 r.setAudioSamplingRate(48000)
                 r.setAudioChannels(1)
-                r.setAudioEncodingBitRate(96_000)
+                r.setAudioEncodingBitRate(VideoSettings.AUDIO_BITRATE)
             }
             // Assumes the phone is held upright (portrait), the usual way for pocket/background recording.
             r.setOrientationHint(cfg.orientation)
-            r.setMaxDuration(SEGMENT_MS)
+            r.setMaxDuration(settings.segmentMs)
             r.setMaxFileSize(MAX_FILE_BYTES)
             r.setOnInfoListener { mr, what, _ ->
                 if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
@@ -475,6 +511,17 @@ class RecordService : Service() {
     private fun rollover() {
         if (stopped || recorder == null) return
         finishPart()
+        startPart()
+    }
+
+    /** Settings changed from the dialog: save the current part and continue with the new settings. */
+    private fun applySettings() {
+        if (stopped) return
+        settings = VideoSettings.load(this)
+        h.removeCallbacks(retry)
+        finishPart()
+        status = "Applying new settings…"
+        updateNotification()
         startPart()
     }
 

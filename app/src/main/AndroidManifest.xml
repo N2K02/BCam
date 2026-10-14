@@ -33,6 +33,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Video settings dialog, opened from the notification's ⚙ Settings button. -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.bcam.app.settings"
+            android:theme="@style/Theme.BCam" />
+
         <service
             android:name=".RecordService"
             android:exported="false"
