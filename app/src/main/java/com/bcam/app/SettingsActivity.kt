@@ -145,7 +145,7 @@ class SettingsActivity : Activity() {
         val sAudio = row("Sound", audioChoices, cur.audio)
         val sSeg = row("New file every", segChoices, cur.segmentMinutes)
         content.addView(estimate)
-        // While recording: switch camera here (the notification only has room for 3 buttons).
+        // While recording: switch camera here too (also "B/F" in the notification).
         if (RecordService.isRunning) {
             content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
                 text = "⟲  Switch camera"

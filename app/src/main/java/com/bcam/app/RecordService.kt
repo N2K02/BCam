@@ -47,7 +47,7 @@ import java.util.Locale
  * Foreground service that records video with no preview.
  *  - Splits automatically into parts (30 minutes by default) and keeps going until stopped.
  *  - Uses H.265/HEVC when the phone has a hardware HEVC encoder, otherwise H.264.
- *  - Notification has "Pause"/"Resume", "Stop" and "⚙ Settings" buttons (Switch camera is in Settings).
+ *  - Notification has "Pause"/"Resume", "B/F" (switch camera) and "Stop"; tapping it opens Settings.
  *  - Pause keeps the same file: the recorder pauses and the camera stops sending frames.
  *  - Resolution, frame rate, quality, codec, sound and part length come from [VideoSettings].
  * All camera / recorder work happens on one background thread ([h]).
@@ -231,8 +231,8 @@ class RecordService : Service() {
         val mute = if (withAudio) "" else " · no sound"
         val text = when {
             recording && paused -> "Tap Resume to continue in the same file"
-            recording -> "$res$codec$mute · new file every ${settings.segmentMinutes} min"
-            else -> "$camName camera"
+            recording -> "$res$codec$mute · new file every ${settings.segmentMinutes} min · tap for settings"
+            else -> "$camName camera · tap for settings"
         }
 
         val icon = Icon.createWithResource(this, R.drawable.ic_stat_rec)
@@ -245,7 +245,8 @@ class RecordService : Service() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-        // Android shows at most 3 buttons: Pause/Resume, Stop, Settings (Switch camera is in Settings).
+        // Android shows at most 3 buttons: Pause/Resume, B/F (switch camera), Stop.
+        // Tapping the notification itself opens Settings.
         // Most phones show only the button text, so each label starts with a symbol; the icon is
         // used where Android does show it (some phones, watches).
         fun ic(res: Int) = Icon.createWithResource(this, res)
@@ -254,15 +255,12 @@ class RecordService : Service() {
                 if (paused) Notification.Action.Builder(ic(R.drawable.ic_play), "▶ Resume", servicePi(ACTION_PAUSE_RESUME, 4)).build()
                 else Notification.Action.Builder(ic(R.drawable.ic_pause), "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
             )
-        } else if (hasBothCameras()) {
-            b.addAction(Notification.Action.Builder(ic(R.drawable.ic_switch), "⟲ Switch to $other", servicePi(ACTION_SWITCH, 2)).build())
+        }
+        if (hasBothCameras()) {
+            b.addAction(Notification.Action.Builder(ic(R.drawable.ic_switch), "⟲ B/F", servicePi(ACTION_SWITCH, 2)).build())
         }
         b.addAction(Notification.Action.Builder(ic(R.drawable.ic_stop), "■ Stop", servicePi(ACTION_STOP, 1)).build())
-        b.addAction(
-            Notification.Action.Builder(
-                Icon.createWithResource(this, R.drawable.ic_settings), "⚙ Settings", settingsPi()
-            ).build()
-        )
+        b.setContentIntent(settingsPi())
         if (recording && !paused) {
             // Timer shows recorded time: pauses are skipped.
             b.setUsesChronometer(true).setShowWhen(true).setWhen(partStartWall + pausedTotalMs)

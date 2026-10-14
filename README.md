@@ -14,13 +14,14 @@ Background video recorder for Android. No screen, no preview — tap the icon an
 |---|---|
 | Tap the **BCam** icon | Recording starts in the background (screen closes immediately) |
 | Notification → **❚❚ Pause / ▶ Resume** | Pauses recording and continues later in the same video file |
+| Notification → **⟲ B/F** | Switches between the back and front camera (saves the current part, continues with the other camera) |
 | Notification → **■ Stop** | Stops and saves the current video |
-| Notification → **⚙ Settings** | Opens the video settings (see below); **Switch camera** is there while recording |
+| **Tap the notification** | Opens the video settings and the Updates card (see below) |
 | Every **30 minutes** (adjustable) | The current file is saved and a new one starts automatically, until you press Stop |
 
 ## Video settings
 
-Tap **⚙ Settings** in the recording notification to choose:
+Tap the recording notification to open the settings and choose:
 
 | Setting | Options | Default |
 |---|---|---|
@@ -53,7 +54,7 @@ Video orientation assumes the phone is held upright (portrait).
 BCam updates itself from this repo's Releases:
 
 - When you tap the icon it checks for a newer release in the background (at most every 12 hours). If there is one, an **"Update available"** notification appears; tap it to open Settings with the update shown in its **Updates** card.
-- To check by hand: ⚙ **Settings** in the recording notification → **Updates** card → **Check for updates**. What's new, the download progress and **Install** all show in that card; the Settings dialog stays open.
+- To check by hand: tap the recording notification → **Updates** card → **Check for updates**. What's new, the download progress and **Install** all show in that card; the Settings dialog stays open.
 - The APK is downloaded inside the app, checked (size, SHA-256 checksum from GitHub, same app, newer version, same signing key) and installed with Android's own installer. If BCam is recording, the recording is stopped and saved first.
 - The first time, Android asks you to allow installs from BCam ("Install unknown apps"); after that you just confirm the update.
 

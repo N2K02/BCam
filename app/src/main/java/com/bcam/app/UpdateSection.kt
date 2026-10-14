@@ -134,7 +134,7 @@ class UpdateSection(private val activity: Activity) {
     private fun offer(r: AppUpdater.Release) {
         release = r
         val whatsNew = r.notes.joinToString("\n") { "•  $it" }.ifEmpty { "Bug fixes and improvements." }
-        val warn = if (RecordService.isRunning) "\n\nInstalling stops the current recording first (the video so far is saved)." else ""
+        val warn = if (RecordService.isRunning) "\n\nUpdate now stops the recording first (the video so far is saved), then updates." else ""
         show(
             "Update available: BCam ${r.versionName}",
             "$versionLine.",
@@ -145,7 +145,26 @@ class UpdateSection(private val activity: Activity) {
         )
     }
 
+    /** Update now: stop and save a running recording first, then download and install. */
     private fun download(r: AppUpdater.Release) {
+        if (RecordService.isRunning) {
+            show("Saving the recording", "Stopping the recording so the video is saved before the update…", null, -1)
+            activity.startService(Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_STOP))
+            waitForRecordingToStop(System.currentTimeMillis()) { startDownload(r) }
+        } else {
+            startDownload(r)
+        }
+    }
+
+    /** Waits (up to 8 s) until the recorder has finished writing and the service has stopped. */
+    private fun waitForRecordingToStop(since: Long, then: () -> Unit) {
+        view.postDelayed({
+            if (closed) return@postDelayed
+            if (RecordService.isRunning && System.currentTimeMillis() - since < 8000) waitForRecordingToStop(since, then) else then()
+        }, 300)
+    }
+
+    private fun startDownload(r: AppUpdater.Release) {
         cancelled = false
         show("Downloading BCam ${r.versionName}", "Getting the update from GitHub…", null, -1, "Cancel" to { cancelled = true; offer(r) })
         Thread {
@@ -189,10 +208,10 @@ class UpdateSection(private val activity: Activity) {
     private fun install(f: File) {
         val r = release
         if (RecordService.isRunning) {
+            // Recording was started again while downloading: stop and save it before installing.
             show("Saving the recording", "Stopping the recording so the video is saved before the update…", null, -1)
             activity.startService(Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_STOP))
-            // Give the recorder a moment to finish writing the current video.
-            view.postDelayed({ if (!closed) openInstaller(f, r) }, 2000)
+            waitForRecordingToStop(System.currentTimeMillis()) { openInstaller(f, r) }
         } else {
             openInstaller(f, r)
         }
