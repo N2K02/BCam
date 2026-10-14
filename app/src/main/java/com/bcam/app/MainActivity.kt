@@ -45,6 +45,8 @@ class MainActivity : Activity() {
     }
 
     private fun startAndClose() {
+        // Looks for a newer BCam on GitHub (at most every 12 h); shows a notification if there is one.
+        AppUpdater.checkInBackgroundIfDue(this)
         if (RecordService.isRunning) {
             if (getSystemService(NotificationManager::class.java).areNotificationsEnabled()) {
                 Toast.makeText(this, "BCam is already recording — use the notification to stop", Toast.LENGTH_SHORT).show()

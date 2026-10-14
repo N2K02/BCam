@@ -126,6 +126,18 @@ class SettingsActivity : Activity() {
         val sAudio = row("Sound", audioChoices, cur.audio)
         val sSeg = row("New file every", segChoices, cur.segmentMinutes)
         content.addView(estimate)
+        content.addView(TextView(this).apply {
+            text = "BCam ${AppUpdater.installedVersionName(this@SettingsActivity)}  ·  Check for updates"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setPadding(0, dp(16), 0, dp(8))
+            setTextColor(0xFF1A73E8.toInt())
+            minimumHeight = dp(48)
+            gravity = Gravity.CENTER_VERTICAL
+            setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, UpdateActivity::class.java))
+                dialog?.dismiss()
+            }
+        })
 
         read = {
             VideoSettings(

@@ -48,6 +48,15 @@ Video orientation assumes the phone is held upright (portrait).
 2. Tap the BCam icon once and allow **Camera**, **Microphone** and **Notifications**.
 3. On Xiaomi / Samsung / Huawei etc. set BCam battery usage to **Unrestricted** so long recordings are not killed.
 
+## Updates
+
+BCam updates itself from this repo's Releases:
+
+- When you tap the icon it checks for a newer release in the background (at most every 12 hours). If there is one, an **"Update available"** notification appears; tap it to see what's new and choose **Update now**, **Later** or **Skip this version**.
+- To check by hand: ⚙ **Settings** in the recording notification → **Check for updates** (at the bottom, next to the version).
+- The APK is downloaded inside the app, checked (size, SHA-256 checksum from GitHub, same app, newer version, same signing key) and installed with Android's own installer. If BCam is recording, the recording is stopped and saved first.
+- The first time, Android asks you to allow installs from BCam ("Install unknown apps"); after that you just confirm the update.
+
 ## Build
 
 Every push to `main` builds the APK with GitHub Actions and publishes it as a release named "BCam <version>" (1.0, 1.1, 1.2 …, one decimal place) with release notes listing the changes since the previous release. To jump to a new number (e.g. 2.0), run the workflow by hand from the Actions tab and type the version. Locally: `./gradlew assembleRelease` (shrunk APK) (JDK 17 + Android SDK).
