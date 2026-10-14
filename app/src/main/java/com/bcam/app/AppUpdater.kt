@@ -23,8 +23,8 @@ import java.security.MessageDigest
  * BCam has no screen, so:
  * - Tapping the app icon checks GitHub in the background (at most every 12 hours). If a newer
  *   release exists, an "Update available" notification appears.
- * - The notification (or "Check for updates" in the ⚙ Settings dialog) opens [UpdateActivity]:
- *   what's new, then download with progress, verify, install.
+ * - The notification opens the ⚙ Settings dialog, whose Updates card ([UpdateSection]) shows
+ *   what's new, downloads with progress, verifies and installs.
  *
  * Verified before installing: size and SHA-256 (from GitHub), same package, newer versionCode,
  * same signing key. Installed through Android's own package installer screen.
@@ -84,7 +84,10 @@ object AppUpdater {
         if (!nm.areNotificationsEnabled()) return
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(
-            c, 0, Intent(c, UpdateActivity::class.java),
+            c, 0,
+            Intent(c, SettingsActivity::class.java)
+                .putExtra(SettingsActivity.EXTRA_CHECK_UPDATES, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = Notification.Builder(c, CHANNEL)

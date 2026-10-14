@@ -47,7 +47,8 @@ import java.util.Locale
  * Foreground service that records video with no preview.
  *  - Splits automatically into parts (30 minutes by default) and keeps going until stopped.
  *  - Uses H.265/HEVC when the phone has a hardware HEVC encoder, otherwise H.264.
- *  - Notification has "Stop", "Switch camera" and "⚙ Settings" buttons.
+ *  - Notification has "Pause"/"Resume", "Stop" and "⚙ Settings" buttons (Switch camera is in Settings).
+ *  - Pause keeps the same file: the recorder pauses and the camera stops sending frames.
  *  - Resolution, frame rate, quality, codec, sound and part length come from [VideoSettings].
  * All camera / recorder work happens on one background thread ([h]).
  */
@@ -59,6 +60,7 @@ class RecordService : Service() {
         const val ACTION_STOP = "com.bcam.app.STOP"
         const val ACTION_SWITCH = "com.bcam.app.SWITCH"
         const val ACTION_APPLY_SETTINGS = "com.bcam.app.APPLY_SETTINGS"
+        const val ACTION_PAUSE_RESUME = "com.bcam.app.PAUSE_RESUME"
 
         private const val MAX_FILE_BYTES = 3_900_000_000L // stay under the 4 GB MP4 limit
         private const val CHANNEL = "recording"
@@ -125,6 +127,10 @@ class RecordService : Service() {
     private var activeSize: Size? = null
     private var activeFps = 30
     private var status = "Starting…"
+    private var paused = false
+    private var pausedAt = 0L          // wall time when the current pause began
+    private var pausedTotalMs = 0L     // pauses in the current part, so the timer shows recorded time
+    private var repeating: CaptureRequest? = null
 
     private val retry = Runnable { if (!stopped && recorder == null) startPart() }
 
@@ -158,6 +164,7 @@ class RecordService : Service() {
                 h.post { shutdown(userStopped = true) }
             }
             ACTION_SWITCH -> if (isRunning) h.post { switchCamera() }
+            ACTION_PAUSE_RESUME -> if (isRunning) h.post { togglePause() }
             ACTION_APPLY_SETTINGS -> if (isRunning) h.post { applySettings() } else stopSelf()
             else -> if (!isRunning) stopSelf()
         }
@@ -214,11 +221,19 @@ class RecordService : Service() {
         val camName = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"
         val other = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "back" else "front"
         val recording = recStarted
-        val title = if (recording) "● REC · $camName camera · Part $part" else "BCam · $status"
+        val title = when {
+            recording && paused -> "❚❚ Paused · $camName camera · Part $part"
+            recording -> "● REC · $camName camera · Part $part"
+            else -> "BCam · $status"
+        }
         val codec = if (usingHevc) "H.265" else "H.264"
         val res = activeSize?.let { "${minOf(it.width, it.height)}p$activeFps · " } ?: ""
         val mute = if (withAudio) "" else " · no sound"
-        val text = if (recording) "$res$codec$mute · new file every ${settings.segmentMinutes} min" else "$camName camera"
+        val text = when {
+            recording && paused -> "Tap Resume to continue in the same file"
+            recording -> "$res$codec$mute · new file every ${settings.segmentMinutes} min"
+            else -> "$camName camera"
+        }
 
         val icon = Icon.createWithResource(this, R.drawable.ic_stat_rec)
         val b = Notification.Builder(this, CHANNEL)
@@ -230,17 +245,23 @@ class RecordService : Service() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .addAction(Notification.Action.Builder(icon, "Stop", servicePi(ACTION_STOP, 1)).build())
-        if (hasBothCameras()) {
+        // Android shows at most 3 buttons: Pause/Resume, Stop, Settings (Switch camera is in Settings).
+        if (recording) {
+            b.addAction(
+                Notification.Action.Builder(icon, if (paused) "▶ Resume" else "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
+            )
+        } else if (hasBothCameras()) {
             b.addAction(Notification.Action.Builder(icon, "Switch to $other", servicePi(ACTION_SWITCH, 2)).build())
         }
+        b.addAction(Notification.Action.Builder(icon, "Stop", servicePi(ACTION_STOP, 1)).build())
         b.addAction(
             Notification.Action.Builder(
                 Icon.createWithResource(this, R.drawable.ic_settings), "⚙ Settings", settingsPi()
             ).build()
         )
-        if (recording) {
-            b.setUsesChronometer(true).setShowWhen(true).setWhen(partStartWall)
+        if (recording && !paused) {
+            // Timer shows recorded time: pauses are skipped.
+            b.setUsesChronometer(true).setShowWhen(true).setWhen(partStartWall + pausedTotalMs)
         } else {
             b.setShowWhen(false)
         }
@@ -375,9 +396,13 @@ class RecordService : Service() {
                             if (cfg.continuousAf) set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                             cfg.fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }
-                        s.setRepeatingRequest(req.build(), null, h)
+                        val built = req.build()
+                        repeating = built
+                        s.setRepeatingRequest(built, null, h)
                         mr.start()
                         recStarted = true
+                        paused = false
+                        pausedTotalMs = 0L
                         part++
                         partStartElapsed = SystemClock.elapsedRealtime()
                         partStartWall = System.currentTimeMillis()
@@ -505,6 +530,36 @@ class RecordService : Service() {
         if (keep) savedParts++
         o?.finish(keep)
         recStarted = false
+        paused = false
+        pausedTotalMs = 0L
+        repeating = null
+    }
+
+    /** Pause: the recorder pauses (same file) and the camera stops sending frames. Resume continues. */
+    private fun togglePause() {
+        val mr = recorder ?: return
+        if (stopped || !recStarted) return
+        try {
+            if (!paused) {
+                mr.pause()
+                runCatching { session?.stopRepeating() }
+                paused = true
+                pausedAt = System.currentTimeMillis()
+                status = "Paused"
+            } else {
+                val req = repeating
+                val s = session
+                if (req != null && s != null) s.setRepeatingRequest(req, null, h)
+                mr.resume()
+                paused = false
+                pausedTotalMs += System.currentTimeMillis() - pausedAt
+                status = "Recording"
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Pause/resume failed", e)
+            main.post { Toast.makeText(this, "BCam: couldn't ${if (paused) "resume" else "pause"} (${e.message})", Toast.LENGTH_SHORT).show() }
+        }
+        updateNotification()
     }
 
     /** 30 minutes reached: save this part and immediately begin the next one. */

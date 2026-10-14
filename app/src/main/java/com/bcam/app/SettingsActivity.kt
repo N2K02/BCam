@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
@@ -28,6 +29,12 @@ import java.util.Locale
 class SettingsActivity : Activity() {
 
     private var dialog: AlertDialog? = null
+    private var updates: UpdateSection? = null
+
+    companion object {
+        /** Open with the update check already running (from the "Update available" notification). */
+        const val EXTRA_CHECK_UPDATES = "check_updates"
+    }
 
     private class Choice<T>(val label: String, val value: T) {
         override fun toString() = label
@@ -40,10 +47,22 @@ class SettingsActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (dialog?.isShowing != true) showDialog()
+        setIntent(intent)
+        if (dialog?.isShowing != true) {
+            showDialog()
+        } else if (intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false)) {
+            intent.removeExtra(EXTRA_CHECK_UPDATES)
+            updates?.check()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updates?.onResume()
     }
 
     override fun onDestroy() {
+        updates?.close()
         dialog?.setOnDismissListener(null)
         dialog?.dismiss()
         super.onDestroy()
@@ -126,18 +145,32 @@ class SettingsActivity : Activity() {
         val sAudio = row("Sound", audioChoices, cur.audio)
         val sSeg = row("New file every", segChoices, cur.segmentMinutes)
         content.addView(estimate)
-        content.addView(TextView(this).apply {
-            text = "BCam ${AppUpdater.installedVersionName(this@SettingsActivity)}  ·  Check for updates"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, dp(16), 0, dp(8))
-            setTextColor(0xFF1A73E8.toInt())
-            minimumHeight = dp(48)
-            gravity = Gravity.CENTER_VERTICAL
-            setOnClickListener {
-                startActivity(Intent(this@SettingsActivity, UpdateActivity::class.java))
-                dialog?.dismiss()
-            }
+        // While recording: switch camera here (the notification only has room for 3 buttons).
+        if (RecordService.isRunning) {
+            content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
+                text = "⟲  Switch camera"
+                isAllCaps = false
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setOnClickListener {
+                    startService(Intent(this@SettingsActivity, RecordService::class.java).setAction(RecordService.ACTION_SWITCH))
+                    Toast.makeText(this@SettingsActivity, "Switching camera…", Toast.LENGTH_SHORT).show()
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(8)
+            })
+        }
+        // Updates card: check, what's new, download and install without leaving this dialog.
+        updates?.close()
+        val upd = UpdateSection(this)
+        updates = upd
+        content.addView(upd.view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(16)
+            bottomMargin = dp(8)
         })
+        if (intent?.getBooleanExtra(EXTRA_CHECK_UPDATES, false) == true) {
+            intent.removeExtra(EXTRA_CHECK_UPDATES)
+            upd.check()
+        }
 
         read = {
             VideoSettings(
@@ -158,7 +191,7 @@ class SettingsActivity : Activity() {
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording) }
             .setPositiveButton(if (recording) "Save & restart" else "Save") { _, _ -> save(read(), recording) }
-            .setOnDismissListener { finish(); overridePendingTransition(0, 0) }
+            .setOnDismissListener { updates?.close(); finish(); overridePendingTransition(0, 0) }
             .show()
     }
 

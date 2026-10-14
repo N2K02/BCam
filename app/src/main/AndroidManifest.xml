@@ -46,15 +46,6 @@
             android:taskAffinity="com.bcam.app.settings"
             android:theme="@style/Theme.BCam" />
 
-        <!-- Update dialog: what's new, download, install. Opened from the update notification or Settings. -->
-        <activity
-            android:name=".UpdateActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:launchMode="singleTop"
-            android:taskAffinity="com.bcam.app.update"
-            android:theme="@style/Theme.BCam" />
-
         <!-- Shares a downloaded update APK with Android's installer (read-only, not exported) -->
         <provider
             android:name=".UpdateFileProvider"
