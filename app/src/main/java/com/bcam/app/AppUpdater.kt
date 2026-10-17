@@ -114,7 +114,7 @@ object AppUpdater {
             c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
             c.setRequestProperty("User-Agent", "$APP_NAME-updater (Android)")
             if (c.responseCode == 404) return null
-            if (c.responseCode != 200) throw IOException("HTTP ${c.responseCode}")
+            if (c.responseCode != 200) throw httpError(c, c.responseCode)
             val o = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
             if (o.optBoolean("draft") || o.optBoolean("prerelease")) return null
             val tag = o.optString("tag_name")
@@ -188,7 +188,7 @@ object AppUpdater {
                 if (url.protocol != "https") throw IOException("Insecure download link")
                 continue
             }
-            if (code != 200) throw IOException("HTTP $code")
+            if (code != 200) throw httpError(conn, code)
             break
         }
         try {
@@ -298,5 +298,13 @@ object AppUpdater {
         } ?: return emptySet()
         val md = MessageDigest.getInstance("SHA-256")
         return sigs.map { sig -> md.digest(sig.toByteArray()).joinToString("") { "%02x".format(it) } }.toSet()
+    }    private fun httpError(connection: HttpURLConnection, code: Int): IOException {
+        val body = runCatching {
+            (connection.errorStream ?: return@runCatching "").bufferedReader().use { it.readText() }
+        }.getOrDefault("")
+        return IOException("HTTP " + code + " at " + connection.url +
+            if (body.isBlank()) "" else "\nResponse body: " + body.take(2000))
     }
+
+
 }
