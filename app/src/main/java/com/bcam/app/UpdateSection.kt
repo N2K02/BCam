@@ -1,6 +1,9 @@
 package com.bcam.app
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -38,6 +41,20 @@ class UpdateSection(private val activity: Activity) {
         setPadding(0, dp(6), 0, 0)
         visibility = View.GONE
     }
+    private val diagnosticsText = TextView(activity).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setPadding(0, dp(8), 0, dp(4))
+        visibility = View.GONE
+    }
+    private val copyDiagnosticsButton = Button(activity, null, android.R.attr.borderlessButtonStyle).apply {
+        text = "Copy diagnostics"
+        isAllCaps = false
+        visibility = View.GONE
+        setOnClickListener {
+            val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Update diagnostics", lastDiagnostics))
+        }
+    }
     private val bar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
         max = 100
         visibility = View.GONE
@@ -57,10 +74,12 @@ class UpdateSection(private val activity: Activity) {
         addView(title)
         addView(status)
         addView(notes)
+        addView(diagnosticsText)
         addView(bar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(8)
         })
         addView(buttons, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(copyDiagnosticsButton)
     }
 
     @Volatile private var cancelled = false
@@ -68,6 +87,7 @@ class UpdateSection(private val activity: Activity) {
     private var release: AppUpdater.Release? = null
     private var file: File? = null
     private var waitingForPermission = false
+    private var lastDiagnostics = ""
 
     init {
         idle()
@@ -100,6 +120,8 @@ class UpdateSection(private val activity: Activity) {
             if (progress >= 0) bar.progress = progress
         }
         buttons.removeAllViews()
+        diagnosticsText.visibility = View.GONE
+        copyDiagnosticsButton.visibility = View.GONE
         actions.forEach { (label, action) ->
             buttons.addView(Button(activity, null, android.R.attr.borderlessButtonStyle).apply {
                 text = label
@@ -116,13 +138,14 @@ class UpdateSection(private val activity: Activity) {
     // ---------------------------------------------------------------- steps
 
     fun check() {
+        lastDiagnostics = ""
         show("Updates", "Checking GitHub for a newer BCam…", null, -1)
         Thread {
             val result = runCatching { AppUpdater.latestRelease() }
             ui {
                 val r = result.getOrNull()
                 when {
-                    result.isFailure -> show("Updates", "Couldn't reach GitHub. Check your connection.", null, null, "Try again" to ::check)
+                    result.isFailure -> failed("GitHub request failed. Tap Show details for diagnostics.", null, diagnosticReport("Release check", null, result.exceptionOrNull()))
                     r == null || !AppUpdater.isNewer(activity, r) ->
                         show("Updates", "$versionLine. It's the latest ✓", null, null, "Check again" to ::check)
                     else -> offer(r)
@@ -165,6 +188,7 @@ class UpdateSection(private val activity: Activity) {
     }
 
     private fun startDownload(r: AppUpdater.Release) {
+        lastDiagnostics = ""
         cancelled = false
         show("Downloading BCam ${r.versionName}", "Getting the update from GitHub…", null, -1, "Cancel" to { cancelled = true; offer(r) })
         Thread {
@@ -177,12 +201,12 @@ class UpdateSection(private val activity: Activity) {
             ui {
                 if (cancelled) return@ui
                 val (f, problem) = result.getOrElse {
-                    failed("Download failed. Check your connection and try again.", r)
+                    failed("Download failed. Tap Show details for diagnostics.", r, diagnosticReport("APK download", r, it))
                     return@ui
                 }
                 if (problem != null) {
                     f.delete()
-                    failed(problem, r)
+                    failed(problem, r, diagnosticReport("APK verification", r, IllegalStateException(problem)))
                     return@ui
                 }
                 file = f
@@ -232,7 +256,20 @@ class UpdateSection(private val activity: Activity) {
         )
     }
 
-    private fun failed(message: String, r: AppUpdater.Release?) {
+    private fun diagnosticReport(stage: String, r: AppUpdater.Release?, error: Throwable?): String = buildString {
+        appendLine("App: BCam")
+        appendLine("Repository: " + AppUpdater.REPO)
+        appendLine("Stage: " + stage)
+        appendLine("Installed version: " + AppUpdater.installedVersionName(activity))
+        appendLine("Target version: " + (r?.versionName ?: "unknown"))
+        appendLine("Release API URL: https://api.github.com/repos/" + AppUpdater.REPO + "/releases/latest")
+        appendLine("APK URL: " + (r?.apkUrl ?: "not available"))
+        appendLine("Exception: " + (error?.javaClass?.name ?: "unknown"))
+        appendLine("Message: " + (error?.message ?: "No exception message"))
+    }.trim()
+
+    private fun failed(message: String, r: AppUpdater.Release?, diagnostics: String = "") {
+        lastDiagnostics = diagnostics
         val actions = mutableListOf<Pair<String, () -> Unit>>(
             "Release page" to {
                 runCatching {
@@ -240,7 +277,12 @@ class UpdateSection(private val activity: Activity) {
                 }
             },
         )
-        if (r != null) actions += "Try again" to { download(r) }
+        actions += "Show details" to {
+            diagnosticsText.text = lastDiagnostics.ifBlank { "No additional diagnostic details were captured." }
+            diagnosticsText.visibility = View.VISIBLE
+            copyDiagnosticsButton.visibility = View.VISIBLE
+        }
+        if (r != null) actions += "Try again" to { lastDiagnostics = ""; diagnosticsText.visibility = View.GONE; copyDiagnosticsButton.visibility = View.GONE; download(r) }
         show("Update problem", message, null, null, *actions.toTypedArray())
     }
 }
