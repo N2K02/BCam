@@ -71,3 +71,14 @@ Every push to `main` builds the APK with GitHub Actions and publishes it as a re
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## Official download and project links
+
+Background video recorder for Android with configurable camera, resolution, frame rate, codec, and recording controls.
+
+- **Latest Android APK:** [Download the latest release](https://github.com/N2K02/BCam/releases/latest)
+- **All releases and version history:** [GitHub Releases](https://github.com/N2K02/BCam/releases)
+- **Source code and issue reporting:** [BCam repository](https://github.com/N2K02/BCam)
+
+The APK is distributed through GitHub Releases. If no release is available, check the repository's Releases page for future published builds. Google indexing is not guaranteed; this section provides clear crawlable links for visitors and search engines.
