@@ -11,6 +11,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.hardware.camera2.CameraAccessException
@@ -32,7 +33,10 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
+import android.os.BatteryManager
 import android.os.SystemClock
+import android.os.storage.StorageManager
+import android.view.OrientationEventListener
 import android.provider.MediaStore
 import android.util.Log
 import android.util.Range
@@ -45,7 +49,10 @@ import java.util.Locale
 
 /**
  * Foreground service that records video with no preview.
- *  - Splits automatically into parts (30 minutes by default) and keeps going until stopped.
+ *  - Splits automatically into parts (about 30 minutes by default) and keeps going until stopped.
+ *    The switch to the next file is seamless: the camera keeps running, so no footage is lost.
+ *  - Records the way the phone is held when recording starts or settings change (portrait or landscape).
+ *  - Stops by itself, saving the video, when storage or battery is about to run out.
  *  - Uses H.265/HEVC when the phone has a hardware HEVC encoder, otherwise H.264.
  *  - Notification has "Pause"/"Resume", "Stop" and "⚙ Settings"; the camera is chosen in Settings.
  *  - Pause keeps the same file: the recorder pauses and the camera stops sending frames.
@@ -66,6 +73,11 @@ class RecordService : Service() {
         private const val CHANNEL = "recording"
         private const val NOTIF_ID = 1
         private const val RETRY_MS = 3000L
+        /** Stop (and keep the video) when less than this much storage is left. */
+        private const val MIN_FREE_BYTES = 300_000_000L
+        /** Stop (and keep the video) at this battery level unless the phone is charging. */
+        private const val MIN_BATTERY_PERCENT = 5
+        private const val SAFETY_CHECK_MS = 30_000L
         private const val PREFS = VideoSettings.PREFS
         const val KEY_FACING = "facing"
 
@@ -116,6 +128,11 @@ class RecordService : Service() {
     private var recorder: MediaRecorder? = null
     private var recStarted = false
     private var out: Output? = null
+    /** The file the recorder switches to when the current one is full (set just before the switch). */
+    private var nextOut: Output? = null
+    /** How the phone is held, from the accelerometer: 0, 90, 180 or 270 degrees. */
+    @Volatile private var deviceDegrees = 0
+    private var orientationListener: OrientationEventListener? = null
     private var token = 0           // bumped to invalidate stale async callbacks
     private var stopped = false
     private var part = 0
@@ -133,6 +150,15 @@ class RecordService : Service() {
     private var repeating: CaptureRequest? = null
 
     private val retry = Runnable { if (!stopped && recorder == null) startPart() }
+
+    /** Every 30 s while recording: stop cleanly before storage or battery runs out. */
+    private val safetyCheck = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            lowResourceReason()?.let { reason -> stopForSafety(reason); return }
+            h.postDelayed(this, SAFETY_CHECK_MS)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -157,7 +183,14 @@ class RecordService : Service() {
                 if (!goForeground()) { stopSelf(); return START_NOT_STICKY }
                 isRunning = true
                 acquireWakeLock()
-                h.post { stopped = false; startPart() }
+                startOrientationListener()
+                h.post {
+                    stopped = false
+                    val reason = lowResourceReason()
+                    if (reason != null) { stopForSafety(reason); return@post }
+                    startPart()
+                    h.postDelayed(safetyCheck, SAFETY_CHECK_MS)
+                }
             }
             ACTION_STOP -> {
                 if (!isRunning) { stopSelf(); return START_NOT_STICKY }
@@ -172,6 +205,7 @@ class RecordService : Service() {
     }
 
     override fun onDestroy() {
+        stopOrientationListener()
         if (isRunning) h.post { shutdown(userStopped = false) }
         thread.quitSafely()
         releaseWakeLock()
@@ -230,7 +264,7 @@ class RecordService : Service() {
         val mute = if (withAudio) "" else " · no sound"
         val text = when {
             recording && paused -> "Tap Resume to continue in the same file"
-            recording -> "$res$codec$mute · new file every ${settings.segmentMinutes} min · tap for settings"
+            recording -> "$res$codec$mute · new file about every ${settings.segmentMinutes} min · tap for settings"
             else -> "$camName camera · tap for settings"
         }
 
@@ -325,9 +359,13 @@ class RecordService : Service() {
 
         val afModes = c.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty()
         val sensor = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+        // Match how the phone is held right now (front camera turns the other way).
+        val front = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        val device = if (front) -deviceDegrees else deviceDegrees
+        val orientation = (sensor + device + 360) % 360
 
         val hevc = settings.preferHevc && hasHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC, size, fps)
-        return Config(size, hevc, fps, fpsRange, sensor, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes)
+        return Config(size, hevc, fps, fpsRange, orientation, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes)
     }
 
     /** True if the phone has a *hardware* encoder for [mime] at [size] and [fps] (software encoders are too slow). */
@@ -450,14 +488,25 @@ class RecordService : Service() {
                 r.setAudioChannels(1)
                 r.setAudioEncodingBitRate(VideoSettings.AUDIO_BITRATE)
             }
-            // Assumes the phone is held upright (portrait), the usual way for pocket/background recording.
+            // The way the phone was held when this file started (see chooseConfig).
             r.setOrientationHint(cfg.orientation)
-            r.setMaxDuration(settings.segmentMs)
-            r.setMaxFileSize(MAX_FILE_BYTES)
+            // Parts are cut by size, sized to about the chosen length: Android can only switch to
+            // the next file without stopping the camera when a size limit is reached.
+            val bitsPerSecond = bitrate.toLong() + if (audio) VideoSettings.AUDIO_BITRATE else 0
+            val segmentBytes = (bitsPerSecond / 8 * settings.segmentMinutes * 60).coerceIn(50_000_000L, MAX_FILE_BYTES)
+            r.setMaxFileSize(segmentBytes)
             r.setOnInfoListener { mr, what, _ ->
-                if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
-                    what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED
-                ) h.post { if (recorder === mr) rollover() }
+                when (what) {
+                    // Nearly full: hand the recorder the next file now, so it continues without a gap.
+                    MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_APPROACHING ->
+                        h.post { if (recorder === mr) prepareNextFile(mr) }
+                    MediaRecorder.MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED ->
+                        h.post { if (recorder === mr) nextFileStarted() }
+                    // Only when the seamless switch wasn't possible: restart with a new file.
+                    MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED,
+                    MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED ->
+                        h.post { if (recorder === mr) rollover() }
+                }
             }
             r.setOnErrorListener { mr, what, extra ->
                 Log.e(TAG, "MediaRecorder error $what/$extra")
@@ -523,10 +572,89 @@ class RecordService : Service() {
         }
         if (keep) savedParts++
         o?.finish(keep)
+        // A next file that was set up but never started is empty.
+        nextOut?.finish(keep = false)
+        nextOut = null
         recStarted = false
         paused = false
         pausedTotalMs = 0L
         repeating = null
+    }
+
+    /** The current file is nearly full: give the recorder the next one so it can switch seamlessly. */
+    private fun prepareNextFile(mr: MediaRecorder) {
+        if (stopped || nextOut != null) return
+        val o = try { newOutput() } catch (e: Exception) {
+            Log.w(TAG, "Next file could not be created; the part will restart instead", e)
+            return
+        }
+        try {
+            if (o.pfd != null) mr.setNextOutputFile(o.pfd.fileDescriptor) else mr.setNextOutputFile(o.file!!)
+            nextOut = o
+        } catch (e: Exception) {
+            Log.w(TAG, "setNextOutputFile failed; the part will restart instead", e)
+            o.finish(keep = false)
+        }
+    }
+
+    /** The recorder moved on to the next file: save the finished one and count a new part. */
+    private fun nextFileStarted() {
+        val next = nextOut ?: return
+        val finished = out
+        out = next
+        nextOut = null
+        finished?.finish(keep = true)
+        savedParts++
+        part++
+        partStartElapsed = SystemClock.elapsedRealtime()
+        partStartWall = System.currentTimeMillis()
+        pausedTotalMs = 0L
+        updateNotification()
+    }
+
+    /** Why recording must stop now (storage or battery nearly gone), or null when it can go on. */
+    private fun lowResourceReason(): String? {
+        val free = runCatching {
+            getSystemService(StorageManager::class.java).getAllocatableBytes(StorageManager.UUID_DEFAULT)
+        }.getOrElse { runCatching { android.os.StatFs(filesDir.path).availableBytes }.getOrDefault(Long.MAX_VALUE) }
+        if (free < MIN_FREE_BYTES) return "storage is almost full"
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        if (battery != null) {
+            val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+            val plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+            if (level >= 0 && scale > 0 && !plugged && level * 100 / scale <= MIN_BATTERY_PERCENT) return "the battery is almost empty"
+        }
+        return null
+    }
+
+    private fun stopForSafety(reason: String) {
+        Log.w(TAG, "Stopping: $reason")
+        val saved = savedParts + if (recStarted) 1 else 0
+        main.post {
+            Toast.makeText(
+                this,
+                if (saved > 0) "BCam stopped because $reason. Your video was saved." else "BCam can't record: $reason.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+        shutdown(userStopped = false)
+    }
+
+    private fun startOrientationListener() {
+        if (orientationListener != null) return
+        orientationListener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(degrees: Int) {
+                // Flat on a table reports UNKNOWN: keep the last real reading.
+                if (degrees == ORIENTATION_UNKNOWN) return
+                deviceDegrees = ((degrees + 45) / 90 * 90) % 360
+            }
+        }.also { if (it.canDetectOrientation()) it.enable() }
+    }
+
+    private fun stopOrientationListener() {
+        orientationListener?.disable()
+        orientationListener = null
     }
 
     /** Pause: the recorder pauses (same file) and the camera stops sending frames. Resume continues. */
@@ -672,6 +800,7 @@ class RecordService : Service() {
         val saved = savedParts
         main.post {
             isRunning = false
+            stopOrientationListener()
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
