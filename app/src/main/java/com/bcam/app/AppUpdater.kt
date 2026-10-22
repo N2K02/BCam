@@ -50,6 +50,13 @@ object AppUpdater {
 
     private fun prefs(c: Context) = c.getSharedPreferences("app_updater", Context.MODE_PRIVATE)
 
+    fun experimentalEnabled(c: Context): Boolean = prefs(c).getBoolean("experimentalEnabled", false)
+
+    fun setExperimentalEnabled(c: Context, enabled: Boolean) {
+        prefs(c).edit().putBoolean("experimentalEnabled", enabled).apply()
+        prefs(c).edit().remove("lastCheck").apply()
+    }
+
     fun installedVersionName(c: Context): String =
         runCatching { packageInfo(c, c.packageName).versionName }.getOrNull().orEmpty()
 
@@ -66,7 +73,7 @@ object AppUpdater {
         }
         if (System.currentTimeMillis() - p.getLong("lastCheck", 0L) < CHECK_EVERY_MS) return
         Thread {
-            val release = runCatching { latestRelease() }.getOrNull()
+            val release = runCatching { latestRelease(app) }.getOrNull()
             p.edit().putLong("lastCheck", System.currentTimeMillis()).apply()
             if (release != null && release.versionCode > installedVersionCode(app) &&
                 p.getString("skipped", null) != release.tag
@@ -105,7 +112,30 @@ object AppUpdater {
 
     // ---------------------------------------------------------------- GitHub (blocking: call off the main thread)
 
-    fun latestRelease(): Release? = runCatching { publicStableRelease() }.getOrNull() ?: legacyLatestRelease()
+    fun latestRelease(context: Context): Release? {
+        val stable = runCatching { publicStableRelease() }.getOrNull() ?: legacyLatestRelease()
+        val experimental = if (experimentalEnabled(context)) runCatching { experimentalRelease() }.getOrNull() else null
+        return listOfNotNull(stable, experimental).maxByOrNull { it.versionCode }
+    }
+
+    private fun experimentalRelease(): Release? {
+        val c = URL("https://n2k02.github.io/bcam/updates/experimental.json").openConnection() as HttpURLConnection
+        try {
+            c.connectTimeout = 10_000
+            c.readTimeout = 15_000
+            if (c.responseCode == 404) return null
+            if (c.responseCode != 200) throw IOException("Experimental HTTP ${c.responseCode}")
+            val o = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+            val url = o.optString("apkUrl")
+            val sha = o.optString("sha256").lowercase()
+            if (o.optString("channel") != "experimental" || o.optLong("versionCode") <= 0 ||
+                !url.startsWith("https://github.com/") || !Regex("[a-f0-9]{64}").matches(sha)) return null
+            val arr = o.optJSONArray("notes")
+            return Release(o.optString("tag"), o.optString("versionName"), o.optLong("versionCode"),
+                if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it) },
+                url, o.optString("apkName"), o.optLong("apkSize"), sha, o.optString("pageUrl"))
+        } finally { c.disconnect() }
+    }
 
     private fun publicStableRelease(): Release? {
         val c = URL("https://n2k02.github.io/bcam/updates/stable.json").openConnection() as HttpURLConnection

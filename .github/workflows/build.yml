@@ -3,6 +3,9 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       version:
@@ -15,7 +18,7 @@ permissions:
 
 # Builds run one at a time, so two quick pushes never get the same version number.
 concurrency:
-  group: release
+  group: ${{ github.event_name == 'pull_request' && format('experiment-pr-{0}', github.event.pull_request.number) || 'release' }}
   cancel-in-progress: false
 
 env:
@@ -23,6 +26,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -50,6 +54,12 @@ jobs:
             ver="$(( n / 10 )).$(( n % 10 ))"
           fi
           echo "VERSION=$ver" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( 100000 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "VERSION_SUFFIX=-experimental.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_SUFFIX=" >> "$GITHUB_ENV"
+          fi
           echo "Version: $ver (previous: ${last:-none})"
 
           # Release notes = commit titles since the previous release (or the last old-style build).
@@ -79,7 +89,7 @@ jobs:
           yes | "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon assembleRelease -PappVersion="$VERSION" 2>&1 | tee build.log || {
+          ./gradlew --no-daemon assembleRelease -PappVersion="$VERSION" -PappVersionCode="$VERSION_CODE" -PappVersionSuffix="$VERSION_SUFFIX" 2>&1 | tee build.log || {
             # One annotation with the full error text (GitHub caps annotations per step at 10).
             msg=$(grep -E '^e: |error:|What went wrong|Dependency .* requires|compileSdk|Android Gradle plugin' -A3 build.log | head -80 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
             echo "::error title=Build failed::$msg"
@@ -117,6 +127,7 @@ jobs:
           path: ${{ env.APP }}-${{ env.VERSION }}.apk
 
       - name: Publish APK as a release (easy phone download)
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
@@ -126,9 +137,24 @@ jobs:
           files: ${{ env.APP }}-${{ env.VERSION }}.apk
           make_latest: true
 
-      - name: Publish stable APK to public website
+      - name: Publish signed experimental APK to source PR release
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          TAG="experimental-pr-$PR_NUMBER-run-$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" "$APP-$VERSION.apk" \
+            --repo "$GITHUB_REPOSITORY" --target "$PR_HEAD_SHA" \
+            --title "$APP experimental · PR #$PR_NUMBER · build $GITHUB_RUN_NUMBER" \
+            --notes-file release-notes.md --prerelease --latest=false
+
+      - name: Publish stable or experimental APK to public website
         env:
           GH_TOKEN: ${{ secrets.MRADIO_DISTRIBUTION_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "::warning::Set MRADIO_DISTRIBUTION_TOKEN before public publishing is enabled."
