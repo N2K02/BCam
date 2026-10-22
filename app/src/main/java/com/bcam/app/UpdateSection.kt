@@ -12,6 +12,7 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.widget.Switch
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -64,6 +65,15 @@ class UpdateSection(private val activity: Activity) {
         gravity = Gravity.END
     }
 
+    private val channelSwitch = Switch(activity).apply {
+        text = "Experimental updates (opt in)"
+        isChecked = AppUpdater.experimentalEnabled(activity)
+        setOnCheckedChangeListener { _, enabled ->
+            AppUpdater.setExperimentalEnabled(activity, enabled)
+            check()
+        }
+    }
+
     val view: View = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(12), dp(12), dp(4))
@@ -72,6 +82,7 @@ class UpdateSection(private val activity: Activity) {
             setColor(0x221A73E8) // light tint of the accent, readable in light and dark
         }
         addView(title)
+        addView(channelSwitch)
         addView(status)
         addView(notes)
         addView(diagnosticsText)
@@ -141,7 +152,7 @@ class UpdateSection(private val activity: Activity) {
         lastDiagnostics = ""
         show("Updates", "Checking GitHub for a newer BCam…", null, -1)
         Thread {
-            val result = runCatching { AppUpdater.latestRelease() }
+            val result = runCatching { AppUpdater.latestRelease(activity) }
             ui {
                 val r = result.getOrNull()
                 when {
