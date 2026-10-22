@@ -105,7 +105,38 @@ object AppUpdater {
 
     // ---------------------------------------------------------------- GitHub (blocking: call off the main thread)
 
-    fun latestRelease(): Release? {
+    fun latestRelease(): Release? = runCatching { publicStableRelease() }.getOrNull() ?: legacyLatestRelease()
+
+    private fun publicStableRelease(): Release? {
+        val c = URL("https://n2k02.github.io/bcam/updates/stable.json").openConnection() as HttpURLConnection
+        try {
+            c.connectTimeout = 10_000
+            c.readTimeout = 15_000
+            if (c.responseCode == 404) return null
+            if (c.responseCode != 200) throw IOException("Manifest HTTP ${c.responseCode}")
+            val o = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+            val digest = o.optString("sha256").lowercase()
+            val apkUrl = o.optString("apkUrl")
+            if (o.optLong("versionCode") <= 0 || !apkUrl.startsWith("https://") || !Regex("[a-f0-9]{64}").matches(digest)) return null
+            val arr = o.optJSONArray("notes")
+            val notes = if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it) }
+            return Release(
+                tag = o.optString("tag"),
+                versionName = o.optString("versionName"),
+                versionCode = o.optLong("versionCode"),
+                notes = notes,
+                apkUrl = apkUrl,
+                apkName = o.optString("apkName"),
+                apkSize = o.optLong("apkSize"),
+                sha256 = digest,
+                pageUrl = o.optString("pageUrl"),
+            )
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    private fun legacyLatestRelease(): Release? {
         val c = URL("https://api.github.com/repos/$REPO/releases/latest").openConnection() as HttpURLConnection
         try {
             c.connectTimeout = 10_000
