@@ -13,6 +13,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.text.InputType
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -91,6 +93,7 @@ class SettingsActivity : Activity() {
         )
         val audioChoices = listOf(Choice("On", true), Choice("Off", false))
         val segChoices = VideoSettings.SEGMENTS.map { Choice("$it min", it) }
+        val stopChoices = VideoSettings.AUTO_STOP_OPTIONS.map { Choice(if (it == 0) "Unlimited" else "$it min", it) } + Choice("Custom", -1)
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -160,6 +163,19 @@ class SettingsActivity : Activity() {
         val sCodec = row("Codec", codecChoices, cur.preferHevc)
         val sAudio = row("Sound", audioChoices, cur.audio)
         val sSeg = row("New file every", segChoices, cur.segmentMinutes)
+        val sStop = row("Auto-stop after", stopChoices, if (cur.autoStopMinutes in VideoSettings.AUTO_STOP_OPTIONS) cur.autoStopMinutes else -1)
+        val customMinutes = EditText(this).apply {
+            hint = "Custom minutes (1–1440)"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(if (cur.autoStopMinutes !in VideoSettings.AUTO_STOP_OPTIONS) cur.autoStopMinutes.toString() else "")
+        }
+        content.addView(customMinutes)
+        val updateCustomVisibility = { customMinutes.visibility = if (sStop.value<Int>() == -1) View.VISIBLE else View.GONE }
+        sStop.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { updateCustomVisibility(); refresh() }
+            override fun onNothingSelected(p: AdapterView<*>?) {}
+        }
+        updateCustomVisibility()
         content.addView(estimate)
         // Updates card: check, what's new, download and install without leaving this dialog.
         updates?.close()
@@ -192,6 +208,7 @@ class SettingsActivity : Activity() {
                 preferHevc = sCodec.value(),
                 audio = sAudio.value(),
                 segmentMinutes = sSeg.value(),
+                autoStopMinutes = if (sStop.value<Int>() == -1) (customMinutes.text.toString().toIntOrNull() ?: 15).coerceIn(1, 1440) else sStop.value(),
             )
         }
         refresh()
