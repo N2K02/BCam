@@ -19,7 +19,7 @@ else
   gh release create "$TAG" "$FILE" --repo "$REPO" --target main --title "$APP $VERSION" --notes-file release-notes.md --latest=false
 fi
 URL="https://github.com/$REPO/releases/download/$TAG/$FILE"
-NOTES=$( { grep '^- ' release-notes.md || true; } | head -10 | sed 's/^- //' | jq -R -s 'split("\\n") | map(select(length > 0))')
+NOTES=$( { grep '^- ' release-notes.md || true; } | head -10 | sed 's/^- //' | jq -R -s 'split("\n") | map(select(length > 0))')
 jq -n --arg tag "$TAG" --arg versionName "$VERSION" --arg apkName "$FILE" --arg apkUrl "$URL" --arg pageUrl "https://github.com/$REPO/releases/tag/$TAG" --arg sha256 "$SHA" --argjson versionCode "$CODE" --argjson apkSize "$SIZE" --argjson notes "$NOTES" '{channel:"stable",tag:$tag,versionName:$versionName,versionCode:$versionCode,apkName:$apkName,apkUrl:$apkUrl,apkSize:$apkSize,sha256:$sha256,pageUrl:$pageUrl,notes:$notes}' > manifest.json
 PATH_IN_REPO="$SLUG/updates/stable.json"
 ENC=$(base64 -w0 manifest.json)
