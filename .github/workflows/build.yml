@@ -64,7 +64,9 @@ jobs:
           echo "Version: $ver (previous: ${last:-none})"
 
           # Release notes = commit titles since the previous release (or the last old-style build).
-          prev="$last"
+          # A public website release tag may not exist in this source Git checkout.
+          prev=""
+          if [ -n "$last" ] && git rev-parse -q --verify "refs/tags/$last" >/dev/null; then prev="$last"; fi
           [ -n "$prev" ] || prev=$(git tag -l 'build-*' | sort -V | tail -1 || true)
           if [ -n "$prev" ]; then range="$prev..HEAD"; else range="HEAD"; fi
           changes=$(git log --no-merges --pretty='- %s' $range | head -40)
