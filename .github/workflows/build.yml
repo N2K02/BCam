@@ -41,6 +41,7 @@ jobs:
       - name: Work out version and release notes
         env:
           REQUESTED: ${{ github.event.inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Last release tag like v1.3 (one decimal place).
           last=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]
