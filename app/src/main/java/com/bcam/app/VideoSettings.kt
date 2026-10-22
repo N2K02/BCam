@@ -19,6 +19,8 @@ data class VideoSettings(
     val audio: Boolean = true,
     /** Minutes per file before a new one starts. */
     val segmentMinutes: Int = 30,
+    /** Total session duration, 0 disables automatic stop. */
+    val autoStopMinutes: Int = 15,
 ) {
     val segmentMs: Int get() = segmentMinutes * 60 * 1000
 
@@ -49,6 +51,7 @@ data class VideoSettings(
             .putBoolean(K_HEVC, preferHevc)
             .putBoolean(K_AUDIO, audio)
             .putInt(K_SEGMENT, segmentMinutes)
+            .putInt(K_AUTO_STOP, autoStopMinutes)
             .apply()
     }
 
@@ -62,10 +65,12 @@ data class VideoSettings(
         private const val K_HEVC = "prefer_hevc"
         private const val K_AUDIO = "audio"
         private const val K_SEGMENT = "segment_minutes"
+        private const val K_AUTO_STOP = "auto_stop_minutes"
 
         val RESOLUTIONS = listOf(720, 1080, 2160)
         val FPS_OPTIONS = listOf(24, 30, 60)
         val SEGMENTS = listOf(10, 15, 30, 60)
+        val AUTO_STOP_OPTIONS = listOf(5, 10, 15, 30, 45, 60, 0)
 
         fun resolutionLabel(r: Int) = if (r >= 2160) "4K (2160p)" else "${r}p"
 
@@ -79,6 +84,7 @@ data class VideoSettings(
                 preferHevc = p.getBoolean(K_HEVC, d.preferHevc),
                 audio = p.getBoolean(K_AUDIO, d.audio),
                 segmentMinutes = p.getInt(K_SEGMENT, d.segmentMinutes).takeIf { it in SEGMENTS } ?: d.segmentMinutes,
+                autoStopMinutes = p.getInt(K_AUTO_STOP, d.autoStopMinutes).takeIf { it in 0..1440 } ?: d.autoStopMinutes,
             )
         }
     }
