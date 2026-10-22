@@ -43,7 +43,266 @@ jobs:
           REQUESTED: ${{ github.event.inputs.version }}
         run: |
           # Last release tag like v1.3 (one decimal place).
-          last=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]$' | sort -V | tail -1 || true)
+          last=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]
+          if [ -n "$REQUESTED" ]; then
+            echo "$REQUESTED" | grep -Eq '^[0-9]+\.[0-9]$' || { echo "::error::Version must look like 1.0"; exit 1; }
+            ver="$REQUESTED"
+          elif [ -z "$last" ]; then
+            ver="1.0"
+          else
+            t=${last#v}; n=$(( ${t%.*} * 10 + ${t#*.} + 1 ))   # add 0.1
+            ver="$(( n / 10 )).$(( n % 10 ))"
+          fi
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( 100000 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "VERSION_SUFFIX=-experimental.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_SUFFIX=" >> "$GITHUB_ENV"
+          fi
+          echo "Version: $ver (previous: ${last:-none})"
+
+          # Release notes = commit titles since the previous release (or the last old-style build).
+          prev="$last"
+          [ -n "$prev" ] || prev=$(git tag -l 'build-*' | sort -V | tail -1 || true)
+          if [ -n "$prev" ]; then range="$prev..HEAD"; else range="HEAD"; fi
+          changes=$(git log --no-merges --pretty='- %s' $range | head -40)
+          [ -n "$changes" ] || changes="- Rebuild, no code changes"
+          {
+            echo "## $APP $ver"
+            echo
+            echo "### What's new"
+            echo "$changes"
+            echo
+            echo "### Install"
+            echo "Download the APK below and install it on your phone."
+            echo
+            echo "_Built from \`${GITHUB_SHA::7}\`${prev:+ · changes since \`$prev\`}_"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Build APK
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          echo "Android SDK: ${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          yes | "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease -PappVersion="$VERSION" -PappVersionCode="$VERSION_CODE" -PappVersionSuffix="$VERSION_SUFFIX" 2>&1 | tee build.log || {
+            # One annotation with the full error text (GitHub caps annotations per step at 10).
+            msg=$(grep -E '^e: |error:|What went wrong|Dependency .* requires|compileSdk|Android Gradle plugin' -A3 build.log | head -80 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=Build failed::$msg"
+            exit 1
+          }
+          # Sign with the app's private key. It is stored encrypted in signing/keys.tar.enc and
+          # unlocked with the SIGNING_PASSPHRASE repository secret, only for this step.
+          # Key rotation: Android 9+ moves from the old (public test) key to the private key with
+          # a signed proof, so installed apps keep updating without reinstalling; the old key
+          # can no longer push updates there.
+          if [ -z "$SIGNING_PASSPHRASE" ]; then
+            echo "::error title=Missing signing secret::Add the SIGNING_PASSPHRASE secret: repo Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          fi
+          K="$RUNNER_TEMP/keys"; mkdir -p "$K"; chmod 700 "$K"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in signing/keys.tar.enc -pass env:SIGNING_PASSPHRASE | tar -xf - -C "$K"
+          BT=$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -1)
+          export RP=$(cat "$K/release.pass") OP=android
+          "$BT/apksigner" rotate --out "$K/lineage" \
+            --old-signer --ks "$K/old.keystore" --ks-pass env:OP --ks-key-alias androiddebugkey --key-pass env:OP \
+            --new-signer --ks "$K/release.p12" --ks-pass env:RP --ks-key-alias release --key-pass env:RP
+          # GitHub turns spaces in download names into dots, so the file is "<App>-<version>.apk".
+          "$BT/apksigner" sign \
+            --ks "$K/old.keystore" --ks-pass env:OP --ks-key-alias androiddebugkey --key-pass env:OP \
+            --next-signer --ks "$K/release.p12" --ks-pass env:RP --ks-key-alias release --key-pass env:RP \
+            --lineage "$K/lineage" --rotation-min-sdk-version 28 \
+            --out "$APP-$VERSION.apk" app/build/outputs/apk/release/app-release-unsigned.apk
+          rm -rf "$K"
+          "$BT/apksigner" verify --print-certs "$APP-$VERSION.apk" | grep -E "Signer.*(DN|SHA-256 digest)"
+
+      - name: Upload APK (workflow artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP }}-${{ env.VERSION }}
+          path: ${{ env.APP }}-${{ env.VERSION }}.apk
+
+      - name: Publish APK as a release (easy phone download)
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.APP }} ${{ env.VERSION }}
+          body_path: release-notes.md
+          files: ${{ env.APP }}-${{ env.VERSION }}.apk
+          make_latest: true
+
+      - name: Publish signed experimental APK to source PR release
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          TAG="experimental-pr-$PR_NUMBER-run-$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" "$APP-$VERSION.apk" \
+            --repo "$GITHUB_REPOSITORY" --target "$PR_HEAD_SHA" \
+            --title "$APP experimental · PR #$PR_NUMBER · build $GITHUB_RUN_NUMBER" \
+            --notes-file release-notes.md --prerelease --latest=false
+
+      - name: Check public distribution configuration
+        id: distribution
+        env:
+          DIST_TOKEN: ${{ secrets.ANDROID_DISTRIBUTION_TOKEN }}
+        run: |
+          if [ -n "$DIST_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANDROID_DISTRIBUTION_TOKEN is unavailable to this repository's workflow. Signed APK artifacts remain available, but public stable/experimental manifests cannot be published."
+          fi
+
+      - name: Publish stable or experimental APK to public distribution
+        if: steps.distribution.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ANDROID_DISTRIBUTION_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/publish-distribution.sh
+ | sort -V | tail -1 || true)
+          # The source repository may be private; the public APK repository also has stable tags.
+          # Accept both current <app>-vX.Y and legacy <app>-vX.Y-build-N tag shapes.
+          public_last=$(gh api 'repos/N2K02/n2k02.github.io/releases?per_page=100' \
+            --jq '.[].tag_name' 2>/dev/null \
+            | sed -nE 's/^bcam-v([0-9]+\.[0-9])(-build-[0-9]+)?$/v\1/p' \
+            | sort -V | tail -1 || true)
+          last=$(printf '%s\n%s\n' "$last" "$public_last" | grep -E '^v[0-9]+\.[0-9]
+          if [ -n "$REQUESTED" ]; then
+            echo "$REQUESTED" | grep -Eq '^[0-9]+\.[0-9]$' || { echo "::error::Version must look like 1.0"; exit 1; }
+            ver="$REQUESTED"
+          elif [ -z "$last" ]; then
+            ver="1.0"
+          else
+            t=${last#v}; n=$(( ${t%.*} * 10 + ${t#*.} + 1 ))   # add 0.1
+            ver="$(( n / 10 )).$(( n % 10 ))"
+          fi
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( 100000 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "VERSION_SUFFIX=-experimental.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_SUFFIX=" >> "$GITHUB_ENV"
+          fi
+          echo "Version: $ver (previous: ${last:-none})"
+
+          # Release notes = commit titles since the previous release (or the last old-style build).
+          prev="$last"
+          [ -n "$prev" ] || prev=$(git tag -l 'build-*' | sort -V | tail -1 || true)
+          if [ -n "$prev" ]; then range="$prev..HEAD"; else range="HEAD"; fi
+          changes=$(git log --no-merges --pretty='- %s' $range | head -40)
+          [ -n "$changes" ] || changes="- Rebuild, no code changes"
+          {
+            echo "## $APP $ver"
+            echo
+            echo "### What's new"
+            echo "$changes"
+            echo
+            echo "### Install"
+            echo "Download the APK below and install it on your phone."
+            echo
+            echo "_Built from \`${GITHUB_SHA::7}\`${prev:+ · changes since \`$prev\`}_"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Build APK
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          echo "Android SDK: ${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          yes | "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease -PappVersion="$VERSION" -PappVersionCode="$VERSION_CODE" -PappVersionSuffix="$VERSION_SUFFIX" 2>&1 | tee build.log || {
+            # One annotation with the full error text (GitHub caps annotations per step at 10).
+            msg=$(grep -E '^e: |error:|What went wrong|Dependency .* requires|compileSdk|Android Gradle plugin' -A3 build.log | head -80 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=Build failed::$msg"
+            exit 1
+          }
+          # Sign with the app's private key. It is stored encrypted in signing/keys.tar.enc and
+          # unlocked with the SIGNING_PASSPHRASE repository secret, only for this step.
+          # Key rotation: Android 9+ moves from the old (public test) key to the private key with
+          # a signed proof, so installed apps keep updating without reinstalling; the old key
+          # can no longer push updates there.
+          if [ -z "$SIGNING_PASSPHRASE" ]; then
+            echo "::error title=Missing signing secret::Add the SIGNING_PASSPHRASE secret: repo Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          fi
+          K="$RUNNER_TEMP/keys"; mkdir -p "$K"; chmod 700 "$K"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in signing/keys.tar.enc -pass env:SIGNING_PASSPHRASE | tar -xf - -C "$K"
+          BT=$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -1)
+          export RP=$(cat "$K/release.pass") OP=android
+          "$BT/apksigner" rotate --out "$K/lineage" \
+            --old-signer --ks "$K/old.keystore" --ks-pass env:OP --ks-key-alias androiddebugkey --key-pass env:OP \
+            --new-signer --ks "$K/release.p12" --ks-pass env:RP --ks-key-alias release --key-pass env:RP
+          # GitHub turns spaces in download names into dots, so the file is "<App>-<version>.apk".
+          "$BT/apksigner" sign \
+            --ks "$K/old.keystore" --ks-pass env:OP --ks-key-alias androiddebugkey --key-pass env:OP \
+            --next-signer --ks "$K/release.p12" --ks-pass env:RP --ks-key-alias release --key-pass env:RP \
+            --lineage "$K/lineage" --rotation-min-sdk-version 28 \
+            --out "$APP-$VERSION.apk" app/build/outputs/apk/release/app-release-unsigned.apk
+          rm -rf "$K"
+          "$BT/apksigner" verify --print-certs "$APP-$VERSION.apk" | grep -E "Signer.*(DN|SHA-256 digest)"
+
+      - name: Upload APK (workflow artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP }}-${{ env.VERSION }}
+          path: ${{ env.APP }}-${{ env.VERSION }}.apk
+
+      - name: Publish APK as a release (easy phone download)
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.APP }} ${{ env.VERSION }}
+          body_path: release-notes.md
+          files: ${{ env.APP }}-${{ env.VERSION }}.apk
+          make_latest: true
+
+      - name: Publish signed experimental APK to source PR release
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          TAG="experimental-pr-$PR_NUMBER-run-$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" "$APP-$VERSION.apk" \
+            --repo "$GITHUB_REPOSITORY" --target "$PR_HEAD_SHA" \
+            --title "$APP experimental · PR #$PR_NUMBER · build $GITHUB_RUN_NUMBER" \
+            --notes-file release-notes.md --prerelease --latest=false
+
+      - name: Check public distribution configuration
+        id: distribution
+        env:
+          DIST_TOKEN: ${{ secrets.ANDROID_DISTRIBUTION_TOKEN }}
+        run: |
+          if [ -n "$DIST_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANDROID_DISTRIBUTION_TOKEN is unavailable to this repository's workflow. Signed APK artifacts remain available, but public stable/experimental manifests cannot be published."
+          fi
+
+      - name: Publish stable or experimental APK to public distribution
+        if: steps.distribution.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ANDROID_DISTRIBUTION_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/publish-distribution.sh
+ | sort -V | tail -1 || true)
           if [ -n "$REQUESTED" ]; then
             echo "$REQUESTED" | grep -Eq '^[0-9]+\.[0-9]$' || { echo "::error::Version must look like 1.0"; exit 1; }
             ver="$REQUESTED"
