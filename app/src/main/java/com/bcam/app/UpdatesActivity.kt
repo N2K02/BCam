@@ -24,13 +24,13 @@ class UpdatesActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(20), dp(20), dp(24))
             addView(TextView(this@UpdatesActivity).apply {
-                text = "About & updates"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+                text = "Updates"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
                 setPadding(0, dp(12), 0, dp(12))
             })
             addView(TextView(this@UpdatesActivity).apply {
                 text = "BCam"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             })
             addView(TextView(this@UpdatesActivity).apply {
                 text = "Version " + AppUpdater.installedVersionName(this@UpdatesActivity)
