@@ -82,6 +82,10 @@ class SettingsActivity : Activity() {
         val segChoices = VideoSettings.SEGMENTS.map { Choice("$it min", it) }
         val stopChoices = VideoSettings.AUTO_STOP_OPTIONS.map { Choice(if (it == 0) "Unlimited" else "$it min", it) } + Choice("Custom", -1)
 
+        fun rounded(color: Int, radius: Int = 20) = GradientDrawable().apply {
+            cornerRadius = dp(radius).toFloat()
+            setColor(color)
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), dp(4))
@@ -117,13 +121,17 @@ class SettingsActivity : Activity() {
                 setPadding(0, 0, dp(12), 0)
             }
             spinner.minimumWidth = dp(148)
+            spinner.background = rounded(0xFF303136.toInt(), 14)
+            spinner.setPadding(dp(12), 0, dp(10), 0)
             content.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(58)
+                minimumHeight = dp(76)
+                background = rounded(0xFF292A2E.toInt(), 18)
+                setPadding(dp(16), dp(6), dp(10), dp(6))
                 addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(spinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f))
-            })
+            }, LinearLayout.LayoutParams(-1, dp(80)).apply { bottomMargin = dp(8) })
             return spinner
         }
 
@@ -219,6 +227,7 @@ class SettingsActivity : Activity() {
                 addView(Button(this@SettingsActivity).apply {
                     text = "Save changes"
                     isAllCaps = false
+                    background = rounded(0xFF435F91.toInt(), 18)
                     setOnClickListener {
                         save(read(), recording, sCam?.value<Int>())
                         finish()
