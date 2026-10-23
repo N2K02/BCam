@@ -5,6 +5,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.MediaRecorder
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -85,6 +86,15 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
         prefs.edit().putInt(RecordService.KEY_FACING, facing).apply()
         if ((changed || switched) && RecordService.isRunning) {
             activity.startService(Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_APPLY_SETTINGS))
+        }
+    }
+    // Back traverses the BCam settings hierarchy before leaving this activity.
+    BackHandler(enabled = tab == 1 || section != "Overview") {
+        if (tab == 1) {
+            tab = 0
+            section = "Overview"
+        } else {
+            section = "Overview"
         }
     }
     val darkTheme = isSystemInDarkTheme()
