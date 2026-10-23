@@ -65,6 +65,7 @@ class RecordService : Service() {
         private const val TAG = "BCam"
         const val ACTION_START = "com.bcam.app.START"
         const val ACTION_STOP = "com.bcam.app.STOP"
+        const val ACTION_DISCARD_CURRENT = "com.bcam.app.DISCARD_CURRENT"
         const val ACTION_SWITCH = "com.bcam.app.SWITCH"
         const val ACTION_APPLY_SETTINGS = "com.bcam.app.APPLY_SETTINGS"
         const val ACTION_PAUSE_RESUME = "com.bcam.app.PAUSE_RESUME"
@@ -194,6 +195,10 @@ class RecordService : Service() {
                     startPart()
                     h.postDelayed(safetyCheck, SAFETY_CHECK_MS)
                 }
+            }
+            ACTION_DISCARD_CURRENT -> {
+                if (!isRunning) { stopSelf(); return START_NOT_STICKY }
+                h.post { shutdown(userStopped = true, discardCurrent = true) }
             }
             ACTION_STOP -> {
                 if (!isRunning) { stopSelf(); return START_NOT_STICKY }
@@ -552,7 +557,7 @@ class RecordService : Service() {
     }
 
     /** Close the current part and save it (unless it never really started). */
-    private fun finishPart() {
+    private fun finishPart(discard: Boolean = false) {
         token++
         val r = recorder
         val s = session
@@ -576,8 +581,8 @@ class RecordService : Service() {
         } else {
             runCatching { s?.close() }
         }
-        if (keep) savedParts++
-        o?.finish(keep)
+        if (keep && !discard) savedParts++
+        o?.finish(keep && !discard)
         // A next file that was set up but never started is empty.
         nextOut?.finish(keep = false)
         nextOut = null
@@ -799,11 +804,11 @@ class RecordService : Service() {
         shutdown(userStopped = false)
     }
 
-    private fun shutdown(userStopped: Boolean) {
+    private fun shutdown(userStopped: Boolean, discardCurrent: Boolean = false) {
         if (stopped) return
         stopped = true
         h.removeCallbacksAndMessages(null)
-        finishPart()
+        finishPart(discard = discardCurrent)
         closeCamera()
         val saved = savedParts
         main.post {
