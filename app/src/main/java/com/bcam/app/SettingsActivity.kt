@@ -167,16 +167,6 @@ class SettingsActivity : Activity() {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
             content.post { showUpdatesPage(checkNow = true) }
         }
-        // Exit: stop (and save) the recording and close BCam.
-        content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
-            text = if (RecordService.isRunning) "⏻  Stop recording & exit BCam" else "⏻  Exit BCam"
-            isAllCaps = false
-            setTextColor(0xFFD93025.toInt())
-            gravity = Gravity.CENTER
-            setOnClickListener { exitApp() }
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(4)
-        })
 
         read = {
             VideoSettings(
