@@ -13,6 +13,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.Switch
+import android.content.res.ColorStateList
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -66,7 +67,7 @@ class UpdateSection(private val activity: Activity) {
     }
 
     private val channelSwitch = Switch(activity).apply {
-        text = "Experimental updates (opt in)"
+        text = "Experimental updates"
         isChecked = AppUpdater.experimentalEnabled(activity)
         setOnCheckedChangeListener { _, enabled ->
             AppUpdater.setExperimentalEnabled(activity, enabled)
@@ -76,13 +77,13 @@ class UpdateSection(private val activity: Activity) {
 
     val view: View = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(12), dp(12), dp(4))
+        setPadding(dp(16), dp(16), dp(16), dp(16))
         background = GradientDrawable().apply {
             cornerRadius = dp(16).toFloat()
-            setColor(0x221A73E8) // light tint of the accent, readable in light and dark
+            setColor(0xFF292A2E.toInt()) // light tint of the accent, readable in light and dark
         }
-        addView(title)
         addView(channelSwitch)
+        addView(title)
         addView(status)
         addView(notes)
         addView(diagnosticsText)
@@ -134,9 +135,12 @@ class UpdateSection(private val activity: Activity) {
         diagnosticsText.visibility = View.GONE
         copyDiagnosticsButton.visibility = View.GONE
         actions.forEach { (label, action) ->
-            buttons.addView(Button(activity, null, android.R.attr.borderlessButtonStyle).apply {
+            buttons.addView(Button(activity).apply {
                 text = label
                 isAllCaps = false
+                minHeight = dp(48)
+                backgroundTintList = ColorStateList.valueOf(0xFF435F91.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
                 setOnClickListener { action() }
             })
         }
@@ -144,7 +148,7 @@ class UpdateSection(private val activity: Activity) {
 
     private val versionLine get() = "You have BCam ${AppUpdater.installedVersionName(activity)}"
 
-    private fun idle() = show("Updates", versionLine, null, null, "Check again" to ::check)
+    private fun idle() = show("Ready to check", "Check for the latest BCam release.", null, null, "Check for updates" to ::check)
 
     // ---------------------------------------------------------------- steps
 
