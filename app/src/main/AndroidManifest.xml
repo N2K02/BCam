@@ -44,7 +44,7 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTop"
             android:taskAffinity="com.bcam.app.settings"
-            android:theme="@style/Theme.BCam" />
+            android:theme="@style/Theme.BCam.Updates" />
 
         <activity
             android:name=".UpdatesActivity"
