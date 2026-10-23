@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import dev.n2k02.updater.PublishedUpdateSource
 import dev.n2k02.updater.UpdateConfig
 import dev.n2k02.updater.UpdateInstallGuard
 import dev.n2k02.updater.UpdaterController
@@ -41,6 +42,7 @@ internal object BCamSharedUpdater {
         return UpdaterController(context = activity.applicationContext,
             config = UpdateConfig(repository = "N2K02/BCam", packageName = activity.packageName,
                 installedVersionCode = code, experimentalEnabled = experimental),
+            publishedSource = PublishedUpdateSource("https://n2k02.github.io/bcam/updates"),
             offerPreferences = activity.getSharedPreferences("app_updater", android.content.Context.MODE_PRIVATE))
     }
     val controller: UpdaterController get() = requireNotNull(controllerInstance)
