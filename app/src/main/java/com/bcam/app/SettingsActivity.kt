@@ -31,7 +31,6 @@ import java.util.Locale
 class SettingsActivity : Activity() {
 
     private var dialog: AlertDialog? = null
-    private var updates: UpdateSection? = null
 
     companion object {
         /** Open with the update check already running (from the "Update available" notification). */
@@ -58,13 +57,7 @@ class SettingsActivity : Activity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        updates?.onResume()
-    }
-
     override fun onDestroy() {
-        updates?.close()
         dialog?.setOnDismissListener(null)
         dialog?.dismiss()
         super.onDestroy()
@@ -218,7 +211,7 @@ class SettingsActivity : Activity() {
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording, null) }
             .setPositiveButton("Save") { _, _ -> save(read(), recording, sCam?.value<Int>()) }
-            .setOnDismissListener { updates?.close(); finish(); overridePendingTransition(0, 0) }
+.setOnDismissListener { finish(); overridePendingTransition(0, 0) }
             .show()
     }
 
