@@ -46,6 +46,11 @@
             android:taskAffinity="com.bcam.app.settings"
             android:theme="@style/Theme.BCam" />
 
+        <activity
+            android:name=".UpdatesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BCam" />
+
         <!-- Shares a downloaded update APK with Android's installer (read-only, not exported) -->
         <provider
             android:name=".UpdateFileProvider"
