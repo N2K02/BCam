@@ -68,6 +68,8 @@ class RecordService : Service() {
         const val ACTION_SWITCH = "com.bcam.app.SWITCH"
         const val ACTION_APPLY_SETTINGS = "com.bcam.app.APPLY_SETTINGS"
         const val ACTION_PAUSE_RESUME = "com.bcam.app.PAUSE_RESUME"
+        const val ACTION_PAUSE = "com.bcam.app.PAUSE"
+        const val ACTION_RESUME = "com.bcam.app.RESUME"
 
         private const val MAX_FILE_BYTES = 3_900_000_000L // stay under the 4 GB MP4 limit
         private const val CHANNEL = "recording"
@@ -83,6 +85,7 @@ class RecordService : Service() {
 
         @Volatile
         var isRunning = false
+        @Volatile var isPaused = false
             private set
     }
 
@@ -198,6 +201,8 @@ class RecordService : Service() {
             }
             ACTION_SWITCH -> if (isRunning) h.post { switchCamera() }
             ACTION_PAUSE_RESUME -> if (isRunning) h.post { togglePause() }
+            ACTION_PAUSE -> if (isRunning) h.post { if (!paused) togglePause() }
+            ACTION_RESUME -> if (isRunning) h.post { if (paused) togglePause() }
             ACTION_APPLY_SETTINGS -> if (isRunning) h.post { applySettings() } else stopSelf()
             else -> if (!isRunning) stopSelf()
         }
@@ -434,6 +439,7 @@ class RecordService : Service() {
                         mr.start()
                         recStarted = true
                         paused = false
+        isPaused = false
                         pausedTotalMs = 0L
                         part++
                         partStartElapsed = SystemClock.elapsedRealtime()
@@ -666,6 +672,7 @@ class RecordService : Service() {
                 mr.pause()
                 runCatching { session?.stopRepeating() }
                 paused = true
+                isPaused = true
                 pausedAt = System.currentTimeMillis()
                 status = "Paused"
             } else {
@@ -674,6 +681,7 @@ class RecordService : Service() {
                 if (req != null && s != null) s.setRepeatingRequest(req, null, h)
                 mr.resume()
                 paused = false
+                isPaused = false
                 pausedTotalMs += System.currentTimeMillis() - pausedAt
                 status = "Recording"
             }
