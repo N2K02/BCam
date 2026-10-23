@@ -220,6 +220,7 @@ class SettingsActivity : Activity() {
                 action("Cancel") { finish() }
                 action("Save") { save(read(), recording, sCam?.value<Int>()); finish() }
             })
+            addView(BCamBottomNavigation.create(this@SettingsActivity, selected = BCamBottomNavigation.Tab.SETTINGS))
         }
         setContentView(page)
     }
