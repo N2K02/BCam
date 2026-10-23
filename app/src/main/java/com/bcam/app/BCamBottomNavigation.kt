@@ -10,7 +10,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 
-/** Two destinations shared by BCam's full-screen Settings and About & updates pages. */
+/** MRadio-style persistent bottom navigation: icon indicator above a text label. */
 object BCamBottomNavigation {
     enum class Tab { SETTINGS, UPDATES }
 
@@ -20,21 +20,15 @@ object BCamBottomNavigation {
         ).toInt()
         val bar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(0xFF222326.toInt())
         }
-        fun tab(destination: Tab, icon: String, label: String) {
+        fun tab(destination: Tab, symbol: String, label: String) {
             val active = destination == selected
-            bar.addView(TextView(activity).apply {
-                text = "$icon  $label"
+            val item = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
-                setTextColor(if (active) 0xFFFFFFFF.toInt() else 0xFFB8C5D6.toInt())
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(22).toFloat()
-                    setColor(if (active) 0xFF345FAD.toInt() else 0xFF30343B.toInt())
-                }
                 isClickable = true
                 isFocusable = true
                 contentDescription = label
@@ -48,10 +42,25 @@ object BCamBottomNavigation {
                         activity.finish()
                     }
                 }
-            }, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                marginStart = dp(4)
-                marginEnd = dp(4)
-            })
+            }
+            item.addView(TextView(activity).apply {
+                text = symbol
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 21f)
+                setTextColor(if (active) 0xFFE0E8FF.toInt() else 0xFFBEC0C8.toInt())
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(if (active) 0xFF405B8B.toInt() else 0xFF222326.toInt())
+                }
+            }, LinearLayout.LayoutParams(dp(68), dp(34)))
+            item.addView(TextView(activity).apply {
+                text = label
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
+                setTextColor(if (active) 0xFFFFFFFF.toInt() else 0xFFBEC0C8.toInt())
+            }, LinearLayout.LayoutParams(-1, dp(24)))
+            bar.addView(item, LinearLayout.LayoutParams(0, dp(64), 1f))
         }
         tab(Tab.SETTINGS, "⚙", "Settings")
         tab(Tab.UPDATES, "↻", "Updates")
