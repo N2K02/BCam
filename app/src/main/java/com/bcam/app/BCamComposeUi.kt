@@ -7,6 +7,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -86,7 +87,11 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             activity.startService(Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_APPLY_SETTINGS))
         }
     }
-    MaterialTheme {
+    val darkTheme = isSystemInDarkTheme()
+    val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (darkTheme) dynamicDarkColorScheme(activity) else dynamicLightColorScheme(activity)
+    } else if (darkTheme) darkColorScheme() else lightColorScheme()
+    MaterialTheme(colorScheme = colors) {
         Scaffold(
             topBar = { CenterAlignedTopAppBar(title = { Text(if (tab == 1) "About & updates" else if (section == "Overview") "Settings" else section) }) },
             bottomBar = {
