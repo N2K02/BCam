@@ -255,7 +255,7 @@ class SettingsActivity : Activity() {
         next.setOnDismissListener {
             updater.close()
             if (updates === updater) updates = null
-            if (updatesDialog === next) updatesDialog = null
+            updatesDialog = null
         }
         updatesDialog = next
         next.show()
