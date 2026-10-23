@@ -36,6 +36,7 @@ fun BcamSettingsDialog(
         shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(28.dp), large = RoundedCornerShape(32.dp)),
     ) {
         var settings by remember { mutableStateOf(initial) }
+        var updatesOpen by remember { mutableStateOf(false) }
         var facing by remember { mutableIntStateOf(initialFacing) }
         var customStop by remember { mutableStateOf(initial.autoStopMinutes !in VideoSettings.AUTO_STOP_OPTIONS) }
         var customMinutes by remember { mutableStateOf(if (customStop) initial.autoStopMinutes.toString() else "") }
@@ -43,10 +44,16 @@ fun BcamSettingsDialog(
             Surface(Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.90f),
                 shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 Column(Modifier.padding(20.dp)) {
-                    Text("Video settings", style = MaterialTheme.typography.headlineSmall)
+                    Text(if (updatesOpen) "App updates" else "Video settings", style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(12.dp))
                     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (updatesOpen) {
+                            Text("Check for updates and install verified releases.", style = MaterialTheme.typography.bodyMedium)
+                            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                                AndroidView(factory = { updateSection.view }, modifier = Modifier.fillMaxWidth())
+                            }
+                        } else {
                         if (cameraOptions) BcamChoice("Camera", facing, listOf(
                             CameraCharacteristics.LENS_FACING_BACK to "Back camera",
                             CameraCharacteristics.LENS_FACING_FRONT to "Front camera")) { facing = it }
@@ -73,17 +80,19 @@ fun BcamSettingsDialog(
                         val size = if (gb >= 1) String.format(Locale.US, "%.1f GB", gb) else "$"+"{(gb * 1000).toInt()} MB"
                         Text("About $"+"size per $"+"{settings.segmentMinutes}-minute file",
                             style = MaterialTheme.typography.bodySmall)
-                        AndroidView(factory = { updateSection.view }, modifier = Modifier.fillMaxWidth())
+                        OutlinedButton(onClick = { updatesOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("App updates →") }
                         TextButton(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
                             Text("Stop recording / exit BCam", color = MaterialTheme.colorScheme.error)
+                        }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onDismiss) { Text("Cancel") }
-                        TextButton(onClick = { onSave(VideoSettings(), null) }) { Text("Reset") }
+                        if (!updatesOpen) TextButton(onClick = { onSave(VideoSettings(), null) }) { Text("Reset") }
                         Spacer(Modifier.weight(1f))
-                        Button(onClick = {
+                        if (updatesOpen) Button(onClick = { updatesOpen = false }) { Text("Done") }
+                        else Button(onClick = {
                             onSave(if (customStop) settings.copy(autoStopMinutes = (customMinutes.toIntOrNull() ?: 15).coerceIn(1, 1440)) else settings,
                                 if (cameraOptions) facing else null)
                         }) { Text("Save") }
