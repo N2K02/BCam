@@ -8,7 +8,6 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -97,11 +96,8 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             section = "Overview"
         }
     }
-    val darkTheme = isSystemInDarkTheme()
-    val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        if (darkTheme) dynamicDarkColorScheme(activity) else dynamicLightColorScheme(activity)
-    } else if (darkTheme) darkColorScheme() else lightColorScheme()
-    MaterialTheme(colorScheme = colors) {
+    // Match MRadio: the shared N2K02Theme owns system day/night and Material You colors.
+    dev.n2k02.theme.N2K02Theme {
         Scaffold(
             topBar = { CenterAlignedTopAppBar(title = { Text(if (tab == 1) "About & updates" else if (section == "Overview") "Settings" else section) }) },
             bottomBar = {
