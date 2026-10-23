@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // App version with one decimal place. CI passes the next number (-PappVersion=1.1);
@@ -9,6 +10,7 @@ require(Regex("""\d+\.\d""").matches(appVersion)) { "appVersion must look like 1
 val appVersionCode = appVersion.split(".").let { (major, minor) -> major.toInt() * 10 + minor.toInt() }
 
 android {
+    buildFeatures { compose = true }
     namespace = "com.bcam.app"
     compileSdk = 37
 
@@ -36,4 +38,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+
+dependencies {
+    implementation("androidx.compose.material3:material3:1.5.0-beta01")
+    implementation("androidx.activity:activity-compose:1.11.0")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
 }
