@@ -16,9 +16,7 @@ class SettingsActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
-        if (::class.java != null) {
-            val controller = BCamSharedUpdater.controller
-            if (controller.status.value == dev.n2k02.updater.UpdateStatus.Idle) controller.check(manual = false)
-        }
+        val controller = BCamSharedUpdater.controller
+        if (controller.status.value == dev.n2k02.updater.UpdateStatus.Idle) controller.check(manual = false)
     }
 }
