@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // App version with one decimal place. CI passes the next number (-PappVersion=1.1);
@@ -32,6 +33,8 @@ android {
         }
     }
 
+    buildFeatures { compose = true }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -43,5 +46,7 @@ dependencies {
     implementation("dev.n2k02:theme:0.1.4")
     implementation("dev.n2k02:updater:0.1.11")
     implementation("androidx.compose.material3:material3:1.5.0-beta01")
+    implementation("androidx.activity:activity-compose:1.11.0")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
