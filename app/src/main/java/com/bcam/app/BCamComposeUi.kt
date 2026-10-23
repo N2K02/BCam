@@ -62,6 +62,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
     val prefs = activity.getSharedPreferences(VideoSettings.PREFS, android.content.Context.MODE_PRIVATE)
     var facing by remember { mutableIntStateOf(prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)) }
     var resetDialog by remember { mutableStateOf(false) }
+    var quitDialog by remember { mutableStateOf(false) }
     val cameraManager = remember { activity.getSystemService(CameraManager::class.java) }
     val caps = remember {
         runCatching {
@@ -106,6 +107,8 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("Settings") })
                     NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
                         icon = { Icon(Icons.Rounded.SystemUpdate, null) }, label = { Text("Updates") })
+                    NavigationBarItem(selected = false, onClick = { quitDialog = true },
+                        icon = { Icon(Icons.Rounded.ExitToApp, null) }, label = { Text("Quit") })
                 }
             }
         ) { insets ->
@@ -190,6 +193,24 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                 }
             }
         }
+        if (quitDialog) AlertDialog(
+            onDismissRequest = { quitDialog = false },
+            title = { Text(if (RecordService.isRunning) "Quit without saving?" else "Quit BCam?") },
+            text = { Text(if (RecordService.isRunning)
+                "Stop recording and discard the current video segment? Earlier completed segments remain saved."
+                else "Close BCam settings?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    quitDialog = false
+                    if (RecordService.isRunning) {
+                        activity.startService(Intent(activity, RecordService::class.java)
+                            .setAction(RecordService.ACTION_DISCARD_CURRENT))
+                    }
+                    activity.finish()
+                }) { Text(if (RecordService.isRunning) "Discard & quit" else "Quit") }
+            },
+            dismissButton = { TextButton(onClick = { quitDialog = false }) { Text("Cancel") } }
+        )
         if (resetDialog) AlertDialog(onDismissRequest = { resetDialog = false },
             title = { Text("Reset video settings?") },
             text = { Text("Restore the default recording settings?") },
