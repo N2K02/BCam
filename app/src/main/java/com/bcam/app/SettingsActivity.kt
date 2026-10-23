@@ -20,6 +20,8 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import android.text.TextUtils
+import android.graphics.drawable.GradientDrawable
 import java.util.Locale
 
 /**
@@ -109,13 +111,15 @@ class SettingsActivity : Activity() {
             val title = TextView(this).apply {
                 text = label
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setPadding(0, 0, dp(12), 0)
             }
+            spinner.minimumWidth = dp(148)
             content.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(48)
+                minimumHeight = dp(58)
                 addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(spinner, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(spinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f))
             })
             return spinner
         }
@@ -159,12 +163,6 @@ class SettingsActivity : Activity() {
         }
         updateCustomVisibility()
         content.addView(estimate)
-        // Open the dedicated full-screen About & updates page.
-        content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
-            text = "About & updates  ›"
-            isAllCaps = false
-            setOnClickListener { showUpdatesPage() }
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
         if (intent?.getBooleanExtra(EXTRA_CHECK_UPDATES, false) == true) {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
             content.post { showUpdatesPage(checkNow = true) }
@@ -208,17 +206,30 @@ class SettingsActivity : Activity() {
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(LinearLayout(this@SettingsActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                fun action(label: String, callback: () -> Unit) {
-                    addView(Button(this@SettingsActivity, null, android.R.attr.borderlessButtonStyle).apply {
-                        text = label
-                        isAllCaps = false
-                        setOnClickListener { callback() }
-                    }, LinearLayout.LayoutParams(0, dp(52), 1f))
-                }
-                action("Reset") { save(VideoSettings(), recording, null); finish() }
-                action("Cancel") { finish() }
-                action("Save") { save(read(), recording, sCam?.value<Int>()); finish() }
+                gravity = Gravity.CENTER_VERTICAL
+                addView(Button(this@SettingsActivity).apply {
+                    text = "Reset"
+                    isAllCaps = false
+                    setOnClickListener {
+                        android.app.AlertDialog.Builder(this@SettingsActivity)
+                            .setTitle("Reset video settings?")
+                            .setMessage("Restore the default recording settings?")
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Reset") { _, _ ->
+                                save(VideoSettings(), recording, null)
+                                showSettingsPage()
+                            }
+                            .show()
+                    }
+                }, LinearLayout.LayoutParams(0, dp(52), 1f))
+                addView(Button(this@SettingsActivity).apply {
+                    text = "Save changes"
+                    isAllCaps = false
+                    setOnClickListener {
+                        save(read(), recording, sCam?.value<Int>())
+                        finish()
+                    }
+                }, LinearLayout.LayoutParams(0, dp(52), 1.5f))
             })
             addView(BCamBottomNavigation.create(this@SettingsActivity, selected = BCamBottomNavigation.Tab.SETTINGS))
         }
