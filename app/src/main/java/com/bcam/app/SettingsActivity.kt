@@ -134,8 +134,6 @@ class SettingsActivity : Activity() {
         }
         getSystemService(android.app.NotificationManager::class.java).cancel(AppUpdater.NOTIF_ID)
         updates?.close()
-        dialog?.setOnDismissListener(null)
-        dialog?.dismiss()
         finishAndRemoveTask()
         overridePendingTransition(0, 0)
     }
