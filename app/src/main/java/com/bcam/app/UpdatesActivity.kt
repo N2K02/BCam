@@ -23,11 +23,6 @@ class UpdatesActivity : Activity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(20), dp(20), dp(24))
-            addView(Button(this@UpdatesActivity).apply {
-                text = "← Back to settings"
-                isAllCaps = false
-                setOnClickListener { finish() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
             addView(TextView(this@UpdatesActivity).apply {
                 text = "About & updates"
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
@@ -43,7 +38,12 @@ class UpdatesActivity : Activity() {
             })
             addView(section.view)
         }
-        setContentView(ScrollView(this).apply { addView(content) })
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(ScrollView(this@UpdatesActivity).apply { addView(content) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(BCamBottomNavigation.create(this@UpdatesActivity, selected = BCamBottomNavigation.Tab.UPDATES))
+        })
         if (intent.getBooleanExtra(SettingsActivity.EXTRA_CHECK_UPDATES, false)) section.check()
     }
 
