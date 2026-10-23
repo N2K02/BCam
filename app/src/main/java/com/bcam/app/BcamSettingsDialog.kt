@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.util.Locale
@@ -51,7 +50,7 @@ fun BcamSettingsDialog(
                         if (updatesOpen) {
                             Text("Check for updates and install verified releases.", style = MaterialTheme.typography.bodyMedium)
                             Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                                AndroidView(factory = { updateSection.view }, modifier = Modifier.fillMaxWidth())
+                                BcamUpdateScreen(updateSection, modifier = Modifier.fillMaxWidth())
                             }
                         } else {
                         if (cameraOptions) BcamChoice("Camera", facing, listOf(
