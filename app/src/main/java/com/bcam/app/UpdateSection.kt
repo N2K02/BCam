@@ -144,7 +144,7 @@ class UpdateSection(private val activity: Activity) {
 
     private val versionLine get() = "You have BCam ${AppUpdater.installedVersionName(activity)}"
 
-    private fun idle() = show("Updates", versionLine, null, null, "Check for updates" to ::check)
+    private fun idle() = show("Updates", versionLine, null, null, "Check again" to ::check)
 
     // ---------------------------------------------------------------- steps
 
