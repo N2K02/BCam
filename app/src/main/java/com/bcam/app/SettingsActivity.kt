@@ -1,6 +1,6 @@
 package com.bcam.app
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import android.app.AlertDialog
 import android.content.Intent
@@ -29,7 +29,7 @@ import java.util.Locale
  * Transparent activity that only shows a dialog over whatever is on screen.
  * Saving while recording finishes the current part and starts a new one with the new settings.
  */
-class SettingsActivity : Activity() {
+class SettingsActivity : ComponentActivity() {
 
     private var updates: UpdateSection? = null
 
