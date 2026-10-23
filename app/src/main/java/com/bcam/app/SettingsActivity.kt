@@ -36,6 +36,9 @@ class SettingsActivity : Activity() {
         const val EXTRA_CHECK_UPDATES = "check_updates"
     }
 
+    private var pendingSave: (() -> Unit)? = null
+    fun saveBeforeExit() { pendingSave?.invoke() }
+
     private class Choice<T>(val label: String, val value: T) {
         override fun toString() = label
     }
@@ -180,6 +183,7 @@ class SettingsActivity : Activity() {
             )
         }
         refresh()
+        pendingSave = { save(read(), RecordService.isRunning, sCam?.value<Int>()) }
 
         val recording = RecordService.isRunning
         val page = LinearLayout(this).apply {
