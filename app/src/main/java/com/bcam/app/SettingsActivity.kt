@@ -32,6 +32,7 @@ class SettingsActivity : Activity() {
 
     private var dialog: AlertDialog? = null
     private var updates: UpdateSection? = null
+    private var updatesDialog: AlertDialog? = null
 
     companion object {
         /** Open with the update check already running (from the "Update available" notification). */
@@ -54,7 +55,7 @@ class SettingsActivity : Activity() {
             showDialog()
         } else if (intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false)) {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
-            updates?.check()
+            showUpdatesPage(checkNow = true)
         }
     }
 
@@ -66,6 +67,7 @@ class SettingsActivity : Activity() {
     override fun onDestroy() {
         updates?.close()
         dialog?.setOnDismissListener(null)
+        updatesDialog?.dismiss()
         dialog?.dismiss()
         super.onDestroy()
     }
@@ -177,17 +179,15 @@ class SettingsActivity : Activity() {
         }
         updateCustomVisibility()
         content.addView(estimate)
-        // Updates card: check, what's new, download and install without leaving this dialog.
-        updates?.close()
-        val upd = UpdateSection(this)
-        updates = upd
-        content.addView(upd.view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(16)
-            bottomMargin = dp(8)
-        })
+        // MRadio-style navigation: a single About & updates destination, not an inline updater.
+        content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
+            text = "About & updates  ›"
+            isAllCaps = false
+            setOnClickListener { showUpdatesPage() }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
         if (intent?.getBooleanExtra(EXTRA_CHECK_UPDATES, false) == true) {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
-            upd.check()
+            content.post { showUpdatesPage(checkNow = true) }
         }
         // Exit: stop (and save) the recording and close BCam.
         content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
@@ -222,6 +222,44 @@ class SettingsActivity : Activity() {
             .setPositiveButton("Save") { _, _ -> save(read(), recording, sCam?.value<Int>()) }
             .setOnDismissListener { updates?.close(); finish(); overridePendingTransition(0, 0) }
             .show()
+    }
+
+    /** Dedicated About & updates destination; the camera settings stay behind it. */
+    private fun showUpdatesPage(checkNow: Boolean = false) {
+        if (updatesDialog?.isShowing == true) {
+            if (checkNow) updates?.check()
+            return
+        }
+        updates?.close()
+        val updater = UpdateSection(this)
+        updates = updater
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(TextView(this@SettingsActivity).apply {
+                text = "BCam"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            })
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Version " + AppUpdater.installedVersionName(this@SettingsActivity)
+                setPadding(0, dp(8), 0, dp(16))
+            })
+            addView(updater.view, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        val next = AlertDialog.Builder(this)
+            .setTitle("About & updates")
+            .setView(ScrollView(this).apply { addView(page) })
+            .setNegativeButton("Back") { _, _ -> }
+            .create()
+        next.setOnDismissListener {
+            updater.close()
+            if (updates === updater) updates = null
+            if (updatesDialog === next) updatesDialog = null
+        }
+        updatesDialog = next
+        next.show()
+        if (checkNow) updater.check()
     }
 
     private fun save(s: VideoSettings, recording: Boolean, facing: Int?) {
