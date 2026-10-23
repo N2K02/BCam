@@ -49,7 +49,7 @@
         <activity
             android:name=".UpdatesActivity"
             android:exported="false"
-            android:theme="@style/Theme.BCam" />
+            android:theme="@style/Theme.BCam.Updates" />
 
         <!-- Shares a downloaded update APK with Android's installer (read-only, not exported) -->
         <provider
