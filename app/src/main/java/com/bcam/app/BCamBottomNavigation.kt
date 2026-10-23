@@ -75,10 +75,11 @@ object BCamBottomNavigation {
             contentDescription = "More options"
             setOnClickListener { anchor ->
                 PopupMenu(activity, anchor).apply {
-                    menu.add("Exit without saving settings").setOnMenuItemClickListener {
+                    menu.add("Save settings and exit (discard unfinished video)").setOnMenuItemClickListener {
+                        (activity as? SettingsActivity)?.saveBeforeExit()
                         if (RecordService.isRunning) {
                             activity.startService(Intent(activity, RecordService::class.java)
-                                .setAction(RecordService.ACTION_STOP))
+                                .setAction(RecordService.ACTION_DISCARD_CURRENT))
                         }
                         activity.finishAndRemoveTask()
                         true
