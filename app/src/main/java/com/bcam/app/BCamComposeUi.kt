@@ -56,7 +56,7 @@ internal object BCamSharedUpdater {
 @Composable
 internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boolean = false, checkNow: Boolean = false) {
     var tab by remember { mutableIntStateOf(if (startUpdates) 1 else 0) }
-    var more by remember { mutableStateOf(false) }
+    var section by remember { mutableStateOf("Overview") }
     var settings by remember { mutableStateOf(VideoSettings.load(activity)) }
     val prefs = activity.getSharedPreferences(VideoSettings.PREFS, android.content.Context.MODE_PRIVATE)
     var facing by remember { mutableIntStateOf(prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)) }
@@ -86,36 +86,44 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             activity.startService(Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_APPLY_SETTINGS))
         }
     }
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    MaterialTheme {
         Scaffold(
-            topBar = { CenterAlignedTopAppBar(title = { Text(if (tab == 0) "Video settings" else "Updates") }) },
+            topBar = { CenterAlignedTopAppBar(title = { Text(if (tab == 1) "About & updates" else if (section == "Overview") "Settings" else section) }) },
             bottomBar = {
                 NavigationBar {
-                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
-                        icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("Settings") }, alwaysShowLabel = true)
+                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0; section = "Overview" },
+                        icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("Settings") })
                     NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
-                        icon = { Icon(Icons.Rounded.SystemUpdate, null) }, label = { Text("Updates") }, alwaysShowLabel = true)
-                    Box {
-                        NavigationBarItem(selected = false, onClick = { more = true },
-                            icon = { Icon(Icons.Rounded.MoreVert, null) }, label = { Text("More") }, alwaysShowLabel = true)
-                        DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
-                            DropdownMenuItem(text = { Text("Save settings and exit") },
-                                leadingIcon = { Icon(Icons.Rounded.ExitToApp, null) },
-                                onClick = {
-                                    more = false
-                                    save()
-                                    if (RecordService.isRunning) activity.startService(
-                                        Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_DISCARD_CURRENT))
-                                    activity.finishAndRemoveTask()
-                                })
-                        }
-                    }
+                        icon = { Icon(Icons.Rounded.SystemUpdate, null) }, label = { Text("Updates") })
                 }
             }
         ) { insets ->
             Column(Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (tab == 0) {
+                if (tab == 0 && section == "Overview") {
+                    Text("Settings", style = MaterialTheme.typography.headlineMedium)
+                    listOf(
+                        Triple("Recording", "Camera, resolution, frame rate and quality", Icons.Rounded.Videocam),
+                        Triple("Audio & files", "Sound, file segments and auto-stop", Icons.Rounded.Settings),
+                    ).forEach { (title, subtitle, icon) ->
+                        Surface(onClick = { section = title }, shape = MaterialTheme.shapes.extraLarge,
+                            color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                            ListItem(headlineContent = { Text(title) }, supportingContent = { Text(subtitle) },
+                                leadingContent = { Icon(icon, null) }, trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
+                        }
+                    }
+                    Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                        ListItem(headlineContent = { Text("About & updates") },
+                            supportingContent = { Text("Version, experimental channel and check for updates") },
+                            leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
+                            trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
+                    }
+                } else if (tab == 0) {
+                    Text("‹ Settings", modifier = Modifier.fillMaxWidth().clickable { section = "Overview" }.padding(vertical = 8.dp),
+                        style = MaterialTheme.typography.titleMedium)
+                    Text(section, style = MaterialTheme.typography.headlineSmall)
+                    if (section == "Recording") {
                     Text("Recording", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     if (caps.third) ChoiceRow("Camera", if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front camera" else "Back camera",
                         listOf("Back camera", "Front camera")) {
@@ -135,6 +143,8 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                     ChoiceRow("Codec", if (settings.preferHevc) "H.265 (HEVC)" else "H.264 (AVC)", listOf("H.265 (HEVC)", "H.264 (AVC)")) {
                         settings = settings.copy(preferHevc = it.startsWith("H.265"))
                     }
+                    }
+                    if (section == "Audio & files") {
                     ChoiceRow("Sound", if (settings.audio) "On" else "Off", listOf("On", "Off")) {
                         settings = settings.copy(audio = it == "On")
                     }
@@ -148,6 +158,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                     val mb = settings.estimatedPartBytes(settings.preferHevc) / 1_000_000.0
                     Text("Estimated ${String.format(Locale.US, "%.0f", mb)} MB per ${settings.segmentMinutes}-minute file",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = { resetDialog = true }, modifier = Modifier.weight(1f)) { Text("Reset") }
                         Button(onClick = { save(); activity.finish() }, modifier = Modifier.weight(1.5f)) { Text("Save changes") }
