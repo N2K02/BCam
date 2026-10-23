@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.PopupMenu
 
 /** MRadio-style persistent bottom navigation: icon indicator above a text label. */
 object BCamBottomNavigation {
@@ -64,6 +65,29 @@ object BCamBottomNavigation {
         }
         tab(Tab.SETTINGS, "⚙", "Settings")
         tab(Tab.UPDATES, "↻", "Updates")
+        val more = TextView(activity).apply {
+            text = "⋮  More"
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(0xFFBEC0C8.toInt())
+            isClickable = true
+            isFocusable = true
+            contentDescription = "More options"
+            setOnClickListener { anchor ->
+                PopupMenu(activity, anchor).apply {
+                    menu.add("Exit without saving settings").setOnMenuItemClickListener {
+                        if (RecordService.isRunning) {
+                            activity.startService(Intent(activity, RecordService::class.java)
+                                .setAction(RecordService.ACTION_STOP))
+                        }
+                        activity.finishAndRemoveTask()
+                        true
+                    }
+                    show()
+                }
+            }
+        }
+        bar.addView(more, LinearLayout.LayoutParams(dp(88), dp(64)))
         return bar
     }
 }
