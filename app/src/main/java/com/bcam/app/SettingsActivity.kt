@@ -221,7 +221,14 @@ class SettingsActivity : Activity() {
             .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording, null) }
             .setPositiveButton("Save") { _, _ -> save(read(), recording, sCam?.value<Int>()) }
             .setOnDismissListener { updates?.close(); finish(); overridePendingTransition(0, 0) }
-            .show()
+            .show().also { windowDialog ->
+                windowDialog.window?.setBackgroundDrawable(
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(0xFF202226.toInt())
+                        cornerRadius = dp(28).toFloat()
+                    }
+                )
+            }
     }
 
     private fun save(s: VideoSettings, recording: Boolean, facing: Int?) {
