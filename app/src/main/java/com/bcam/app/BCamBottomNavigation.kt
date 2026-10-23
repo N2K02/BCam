@@ -23,7 +23,7 @@ object BCamBottomNavigation {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            setBackgroundColor(0xFF222326.toInt())
+            setBackgroundColor(0xFF1C1D21.toInt())
         }
         fun tab(destination: Tab, symbol: String, label: String) {
             val active = destination == selected
@@ -51,7 +51,7 @@ object BCamBottomNavigation {
                 setTextColor(if (active) 0xFFE0E8FF.toInt() else 0xFFBEC0C8.toInt())
                 background = GradientDrawable().apply {
                     cornerRadius = dp(18).toFloat()
-                    setColor(if (active) 0xFF405B8B.toInt() else 0xFF222326.toInt())
+                    setColor(if (active) 0xFF435F91.toInt() else 0xFF1C1D21.toInt())
                 }
             }, LinearLayout.LayoutParams(dp(68), dp(34)))
             item.addView(TextView(activity).apply {
@@ -64,11 +64,11 @@ object BCamBottomNavigation {
             bar.addView(item, LinearLayout.LayoutParams(0, dp(64), 1f))
         }
         tab(Tab.SETTINGS, "⚙", "Settings")
-        tab(Tab.UPDATES, "↻", "Updates")
+        tab(Tab.UPDATES, "⟳", "Updates")
         val more = TextView(activity).apply {
-            text = "⋮  More"
+            text = "⋮\nMore"
             gravity = Gravity.CENTER
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(0xFFBEC0C8.toInt())
             isClickable = true
             isFocusable = true
