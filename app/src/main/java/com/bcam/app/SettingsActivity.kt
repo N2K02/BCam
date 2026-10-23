@@ -30,7 +30,6 @@ import java.util.Locale
  */
 class SettingsActivity : Activity() {
 
-    private var dialog: AlertDialog? = null
     private var updates: UpdateSection? = null
 
     companion object {
@@ -50,7 +49,7 @@ class SettingsActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (dialog?.isShowing != true) {
+        if (updates == null) {
             showDialog()
         } else if (intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false)) {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
@@ -65,170 +64,40 @@ class SettingsActivity : Activity() {
 
     override fun onDestroy() {
         updates?.close()
-        dialog?.setOnDismissListener(null)
-        dialog?.dismiss()
         super.onDestroy()
     }
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     private fun showDialog() {
-        val cur = VideoSettings.load(this)
         val caps = cameraCaps()
-
-        val resChoices = VideoSettings.RESOLUTIONS
-            .filter { it <= caps.maxHeight || it == cur.resolution || it == 720 }
-            .map { Choice(VideoSettings.resolutionLabel(it), it) }
-        val fpsChoices = VideoSettings.FPS_OPTIONS
-            .filter { it != 60 || caps.has60 || cur.fps == 60 }
-            .map { Choice("$it fps", it) }
-        val qualityChoices = listOf(
-            Choice("Low · smaller files", 0),
-            Choice("Standard", 1),
-            Choice("High · bigger files", 2),
-        )
-        val codecChoices = listOf(
-            Choice("H.265 (smaller, if supported)", true),
-            Choice("H.264 (plays everywhere)", false),
-        )
-        val audioChoices = listOf(Choice("On", true), Choice("Off", false))
-        val segChoices = VideoSettings.SEGMENTS.map { Choice("$it min", it) }
-        val stopChoices = VideoSettings.AUTO_STOP_OPTIONS.map { Choice(if (it == 0) "Unlimited" else "$it min", it) } + Choice("Custom", -1)
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), dp(4))
-        }
-        val estimate = TextView(this).apply {
-            setPadding(0, dp(12), 0, 0)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            alpha = 0.75f
-        }
-
-        lateinit var read: () -> VideoSettings
-        val refresh = {
-            val s = read()
-            val hevc = s.preferHevc
-            val gb = s.estimatedPartBytes(hevc) / 1_000_000_000.0
-            val size = if (gb >= 1) String.format(Locale.US, "%.1f GB", gb) else "${(gb * 1000).toInt()} MB"
-            estimate.text = "About $size per ${s.segmentMinutes}-minute file" +
-                if (hevc) " (H.265; more if the phone falls back to H.264)" else ""
-        }
-
-        fun <T> row(label: String, choices: List<Choice<T>>, selected: T): Spinner {
-            val spinner = Spinner(this).apply {
-                adapter = ArrayAdapter(this@SettingsActivity, android.R.layout.simple_spinner_dropdown_item, choices)
-                setSelection(choices.indexOfFirst { it.value == selected }.coerceAtLeast(0))
-                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = refresh()
-                    override fun onNothingSelected(p: AdapterView<*>?) {}
-                }
-            }
-            val title = TextView(this).apply {
-                text = label
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            }
-            content.addView(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(48)
-                addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(spinner, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            })
-            return spinner
-        }
-
-        @Suppress("UNCHECKED_CAST")
-        fun <T> Spinner.value(): T = (selectedItem as Choice<T>).value
-
-        // Back / front camera. While recording, saving a change continues with the other camera
-        // in a new file (the two cameras record at different angles and sizes).
-        val curFacing = getSharedPreferences(VideoSettings.PREFS, MODE_PRIVATE)
-            .getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)
-        val sCam = if (caps.hasBothCameras) {
-            row(
-                "Camera",
-                listOf(
-                    Choice("Back camera", CameraCharacteristics.LENS_FACING_BACK),
-                    Choice("Front camera", CameraCharacteristics.LENS_FACING_FRONT),
-                ),
-                curFacing,
-            )
-        } else {
-            null
-        }
-        val sRes = row("Resolution", resChoices, cur.resolution)
-        val sFps = row("Frame rate", fpsChoices, cur.fps)
-        val sQuality = row("Quality", qualityChoices, cur.quality)
-        val sCodec = row("Codec", codecChoices, cur.preferHevc)
-        val sAudio = row("Sound", audioChoices, cur.audio)
-        val sSeg = row("New file every", segChoices, cur.segmentMinutes)
-        val sStop = row("Auto-stop after", stopChoices, if (cur.autoStopMinutes in VideoSettings.AUTO_STOP_OPTIONS) cur.autoStopMinutes else -1)
-        val customMinutes = EditText(this).apply {
-            hint = "Custom minutes (1–1440)"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setText(if (cur.autoStopMinutes !in VideoSettings.AUTO_STOP_OPTIONS) cur.autoStopMinutes.toString() else "")
-        }
-        content.addView(customMinutes)
-        val updateCustomVisibility = { customMinutes.visibility = if (sStop.value<Int>() == -1) View.VISIBLE else View.GONE }
-        sStop.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { updateCustomVisibility(); refresh() }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
-        }
-        updateCustomVisibility()
-        content.addView(estimate)
-        // Updates card: check, what's new, download and install without leaving this dialog.
+        val updater = UpdateSection(this)
         updates?.close()
-        val upd = UpdateSection(this)
-        updates = upd
-        content.addView(upd.view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(16)
-            bottomMargin = dp(8)
-        })
+        updates = updater
+        val initialFacing = getSharedPreferences(VideoSettings.PREFS, MODE_PRIVATE)
+            .getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)
+        androidx.activity.compose.setContent {
+            BcamSettingsDialog(
+                initial = VideoSettings.load(this),
+                cameraOptions = caps.hasBothCameras,
+                maximumHeight = caps.maxHeight,
+                supports60Fps = caps.has60,
+                initialFacing = initialFacing,
+                updateSection = updater,
+                onDismiss = { updates?.close(); finish(); overridePendingTransition(0, 0) },
+                onSave = { settings, facing ->
+                    save(settings, RecordService.isRunning, facing)
+                    updates?.close()
+                    finish()
+                    overridePendingTransition(0, 0)
+                },
+                onExit = ::exitApp,
+            )
+        }
         if (intent?.getBooleanExtra(EXTRA_CHECK_UPDATES, false) == true) {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
-            upd.check()
+            updater.check()
         }
-        // Exit: stop (and save) the recording and close BCam.
-        content.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
-            text = if (RecordService.isRunning) "⏻  Stop recording & exit BCam" else "⏻  Exit BCam"
-            isAllCaps = false
-            setTextColor(0xFFD93025.toInt())
-            gravity = Gravity.CENTER
-            setOnClickListener { exitApp() }
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(4)
-        })
-
-        read = {
-            VideoSettings(
-                resolution = sRes.value(),
-                fps = sFps.value(),
-                quality = sQuality.value(),
-                preferHevc = sCodec.value(),
-                audio = sAudio.value(),
-                segmentMinutes = sSeg.value(),
-                autoStopMinutes = if (sStop.value<Int>() == -1) (customMinutes.text.toString().toIntOrNull() ?: 15).coerceIn(1, 1440) else sStop.value(),
-            )
-        }
-        refresh()
-
-        val recording = RecordService.isRunning
-        dialog = AlertDialog.Builder(this)
-            .setTitle("Video settings")
-            .setView(ScrollView(this).apply { addView(content) })
-            .setNegativeButton("Cancel", null)
-            .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording, null) }
-            .setPositiveButton("Save") { _, _ -> save(read(), recording, sCam?.value<Int>()) }
-            .setOnDismissListener { updates?.close(); finish(); overridePendingTransition(0, 0) }
-            .show().also { windowDialog ->
-                windowDialog.window?.setBackgroundDrawable(
-                    android.graphics.drawable.GradientDrawable().apply {
-                        setColor(0xFF202226.toInt())
-                        cornerRadius = dp(28).toFloat()
-                    }
-                )
-            }
     }
 
     private fun save(s: VideoSettings, recording: Boolean, facing: Int?) {
