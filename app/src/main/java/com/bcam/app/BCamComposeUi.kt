@@ -36,11 +36,11 @@ internal object BCamSharedUpdater {
     }
     private fun newController(activity: ComponentActivity): UpdaterController {
         val p = activity.packageManager.getPackageInfo(activity.packageName, 0)
-        val code = if (Build.VERSION.SDK_INT >= 28) p.longVersionCode else @Suppress("DEPRECATION") p.versionCode.toLong()
-        return UpdaterController(activity.applicationContext,
-            UpdateConfig(repository = "N2K02/BCam", packageName = activity.packageName,
+        val code = if (Build.VERSION.SDK_INT >= 28) p.longVersionCode else p.versionCode.toLong()
+        return UpdaterController(context = activity.applicationContext,
+            config = UpdateConfig(repository = "N2K02/BCam", packageName = activity.packageName,
                 installedVersionCode = code, experimentalEnabled = experimental),
-            activity.getSharedPreferences("app_updater", android.content.Context.MODE_PRIVATE))
+            offerPreferences = activity.getSharedPreferences("app_updater", android.content.Context.MODE_PRIVATE))
     }
     val controller: UpdaterController get() = requireNotNull(controllerInstance)
     fun toggle(activity: ComponentActivity, enabled: Boolean) {
