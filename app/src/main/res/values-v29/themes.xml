@@ -10,4 +10,11 @@
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+    <!-- Opaque standalone updater; recording/settings keep their translucent theme. -->
+    <style name="Theme.BCam.Updates" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
 </resources>

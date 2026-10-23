@@ -65,9 +65,12 @@ class RecordService : Service() {
         private const val TAG = "BCam"
         const val ACTION_START = "com.bcam.app.START"
         const val ACTION_STOP = "com.bcam.app.STOP"
+        const val ACTION_DISCARD_CURRENT = "com.bcam.app.DISCARD_CURRENT"
         const val ACTION_SWITCH = "com.bcam.app.SWITCH"
         const val ACTION_APPLY_SETTINGS = "com.bcam.app.APPLY_SETTINGS"
         const val ACTION_PAUSE_RESUME = "com.bcam.app.PAUSE_RESUME"
+        const val ACTION_PAUSE = "com.bcam.app.PAUSE"
+        const val ACTION_RESUME = "com.bcam.app.RESUME"
 
         private const val MAX_FILE_BYTES = 3_900_000_000L // stay under the 4 GB MP4 limit
         private const val CHANNEL = "recording"
@@ -83,6 +86,7 @@ class RecordService : Service() {
 
         @Volatile
         var isRunning = false
+        @Volatile var isPaused = false
             private set
     }
 
@@ -192,12 +196,18 @@ class RecordService : Service() {
                     h.postDelayed(safetyCheck, SAFETY_CHECK_MS)
                 }
             }
+            ACTION_DISCARD_CURRENT -> {
+                if (!isRunning) { stopSelf(); return START_NOT_STICKY }
+                h.post { shutdown(userStopped = true, discardCurrent = true) }
+            }
             ACTION_STOP -> {
                 if (!isRunning) { stopSelf(); return START_NOT_STICKY }
                 h.post { shutdown(userStopped = true) }
             }
             ACTION_SWITCH -> if (isRunning) h.post { switchCamera() }
             ACTION_PAUSE_RESUME -> if (isRunning) h.post { togglePause() }
+            ACTION_PAUSE -> if (isRunning) h.post { if (!paused) togglePause() }
+            ACTION_RESUME -> if (isRunning) h.post { if (paused) togglePause() }
             ACTION_APPLY_SETTINGS -> if (isRunning) h.post { applySettings() } else stopSelf()
             else -> if (!isRunning) stopSelf()
         }
@@ -434,6 +444,7 @@ class RecordService : Service() {
                         mr.start()
                         recStarted = true
                         paused = false
+        isPaused = false
                         pausedTotalMs = 0L
                         part++
                         partStartElapsed = SystemClock.elapsedRealtime()
@@ -546,7 +557,7 @@ class RecordService : Service() {
     }
 
     /** Close the current part and save it (unless it never really started). */
-    private fun finishPart() {
+    private fun finishPart(discard: Boolean = false) {
         token++
         val r = recorder
         val s = session
@@ -570,8 +581,8 @@ class RecordService : Service() {
         } else {
             runCatching { s?.close() }
         }
-        if (keep) savedParts++
-        o?.finish(keep)
+        if (keep && !discard) savedParts++
+        o?.finish(keep && !discard)
         // A next file that was set up but never started is empty.
         nextOut?.finish(keep = false)
         nextOut = null
@@ -666,6 +677,7 @@ class RecordService : Service() {
                 mr.pause()
                 runCatching { session?.stopRepeating() }
                 paused = true
+                isPaused = true
                 pausedAt = System.currentTimeMillis()
                 status = "Paused"
             } else {
@@ -674,6 +686,7 @@ class RecordService : Service() {
                 if (req != null && s != null) s.setRepeatingRequest(req, null, h)
                 mr.resume()
                 paused = false
+                isPaused = false
                 pausedTotalMs += System.currentTimeMillis() - pausedAt
                 status = "Recording"
             }
@@ -791,11 +804,11 @@ class RecordService : Service() {
         shutdown(userStopped = false)
     }
 
-    private fun shutdown(userStopped: Boolean) {
+    private fun shutdown(userStopped: Boolean, discardCurrent: Boolean = false) {
         if (stopped) return
         stopped = true
         h.removeCallbacksAndMessages(null)
-        finishPart()
+        finishPart(discard = discardCurrent)
         closeCamera()
         val saved = savedParts
         main.post {
