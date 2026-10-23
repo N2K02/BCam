@@ -1,7 +1,6 @@
 package com.bcam.app
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -24,13 +23,11 @@ import android.widget.Toast
 import java.util.Locale
 
 /**
- * Video settings dialog, opened from the ⚙ Settings button in the recording notification.
- * Transparent activity that only shows a dialog over whatever is on screen.
+ * Full-screen video settings page, opened from the recording notification.
  * Saving while recording finishes the current part and starts a new one with the new settings.
  */
 class SettingsActivity : Activity() {
 
-    private var dialog: AlertDialog? = null
 
     companion object {
         /** Open with the update check already running (from the "Update available" notification). */
@@ -43,29 +40,21 @@ class SettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        showDialog()
+        showSettingsPage()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (dialog?.isShowing != true) {
-            showDialog()
-        } else if (intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false)) {
+        if (intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false)) {
             intent.removeExtra(EXTRA_CHECK_UPDATES)
             showUpdatesPage(checkNow = true)
         }
     }
 
-    override fun onDestroy() {
-        dialog?.setOnDismissListener(null)
-        dialog?.dismiss()
-        super.onDestroy()
-    }
-
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
-    private fun showDialog() {
+    private fun showSettingsPage() {
         val cur = VideoSettings.load(this)
         val caps = cameraCaps()
 
@@ -205,14 +194,34 @@ class SettingsActivity : Activity() {
         refresh()
 
         val recording = RecordService.isRunning
-        dialog = AlertDialog.Builder(this)
-            .setTitle("Video settings")
-            .setView(ScrollView(this).apply { addView(content) })
-            .setNegativeButton("Cancel", null)
-            .setNeutralButton("Reset") { _, _ -> save(VideoSettings(), recording, null) }
-            .setPositiveButton("Save") { _, _ -> save(read(), recording, sCam?.value<Int>()) }
-.setOnDismissListener { finish(); overridePendingTransition(0, 0) }
-            .show()
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Video settings"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+                setPadding(dp(4), dp(8), 0, dp(16))
+            })
+            addView(ScrollView(this@SettingsActivity).apply {
+                isFillViewport = false
+                addView(content)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                fun action(label: String, callback: () -> Unit) {
+                    addView(Button(this@SettingsActivity, null, android.R.attr.borderlessButtonStyle).apply {
+                        text = label
+                        isAllCaps = false
+                        setOnClickListener { callback() }
+                    }, LinearLayout.LayoutParams(0, dp(52), 1f))
+                }
+                action("Reset") { save(VideoSettings(), recording, null); finish() }
+                action("Cancel") { finish() }
+                action("Save") { save(read(), recording, sCam?.value<Int>()); finish() }
+            })
+        }
+        setContentView(page)
     }
 
     private fun showUpdatesPage(checkNow: Boolean = false) {
@@ -254,9 +263,6 @@ class SettingsActivity : Activity() {
             startService(Intent(this, RecordService::class.java).setAction(RecordService.ACTION_STOP))
         }
         getSystemService(android.app.NotificationManager::class.java).cancel(AppUpdater.NOTIF_ID)
-        updates?.close()
-        dialog?.setOnDismissListener(null)
-        dialog?.dismiss()
         finishAndRemoveTask()
         overridePendingTransition(0, 0)
     }
