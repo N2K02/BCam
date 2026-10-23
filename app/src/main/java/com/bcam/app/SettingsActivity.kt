@@ -1,6 +1,7 @@
 package com.bcam.app
 
 import android.app.Activity
+import androidx.activity.compose.setContent
 import android.app.AlertDialog
 import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
@@ -76,7 +77,7 @@ class SettingsActivity : Activity() {
         updates = updater
         val initialFacing = getSharedPreferences(VideoSettings.PREFS, MODE_PRIVATE)
             .getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)
-        androidx.activity.compose.setContent {
+        setContent {
             BcamSettingsDialog(
                 initial = VideoSettings.load(this),
                 cameraOptions = caps.hasBothCameras,
