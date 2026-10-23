@@ -8,6 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -104,7 +106,7 @@ private fun <T> BcamChoice(label: String, selected: T, options: List<Pair<T, Str
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (value, name) ->
                 DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(value); expanded = false },
-                    leadingIcon = if (value == selected) ({ Icon(androidx.compose.material.icons.Icons.Filled.Check, null) }) else null)
+                    leadingIcon = if (value == selected) ({ Icon(Icons.Filled.Check, null) }) else null)
             }
         }
     }
