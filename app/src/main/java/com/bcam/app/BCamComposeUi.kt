@@ -58,6 +58,7 @@ internal object BCamSharedUpdater {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boolean = false, checkNow: Boolean = false) {
+    val updateStatus by BCamSharedUpdater.controller.status.collectAsState()
     var tab by remember { mutableIntStateOf(if (startUpdates) 1 else 0) }
     var section by remember { mutableStateOf("Overview") }
     var settings by remember { mutableStateOf(VideoSettings.load(activity)) }
@@ -106,9 +107,9 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(selected = tab == 0, onClick = { tab = 0; section = "Overview" },
-                        icon = { Icon(Icons.Rounded.Settings, null) }, label = { Text("Settings") })
+                        icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.Settings, "Settings") } }, label = { Text("Settings") })
                     NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
-                        icon = { Icon(Icons.Rounded.SystemUpdate, null) }, label = { Text("Updates") })
+                        icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.SystemUpdate, "Updates") } }, label = { Text("Updates") })
                     NavigationBarItem(selected = false, onClick = { quitDialog = true },
                         icon = { Icon(Icons.Rounded.ExitToApp, null) }, label = { Text("Quit") })
                 }
@@ -125,13 +126,13 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         Surface(onClick = { section = title }, shape = MaterialTheme.shapes.extraLarge,
                             color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                             ListItem(headlineContent = { Text(title) }, supportingContent = { Text(subtitle) },
-                                leadingContent = { Icon(icon, null) }, trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
+                                leadingContent = { Icon(icon, null) }, trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) })
                         }
                     }
                     Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.extraLarge,
                         color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                         ListItem(headlineContent = { Text("About & updates") },
-                            supportingContent = { Text("Version, experimental channel and check for updates") },
+                            supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
                             leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
                             trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
                     }
