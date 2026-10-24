@@ -14,7 +14,6 @@ class UpdatesActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
-        val controller = BCamSharedUpdater.controller
-        if (controller.status.value == dev.n2k02.updater.UpdateStatus.Idle) controller.check(manual = false)
+        BCamSharedUpdater.controller.onHostResume(this, BCamSharedUpdater.guard)
     }
 }
