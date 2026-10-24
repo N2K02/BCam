@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import dev.n2k02.updater.PublishedUpdateSource
 import dev.n2k02.updater.UpdateConfig
 import dev.n2k02.updater.UpdateInstallGuard
+import dev.n2k02.updater.hasPendingUpdate
 import dev.n2k02.updater.UpdaterController
 import java.util.Locale
 
