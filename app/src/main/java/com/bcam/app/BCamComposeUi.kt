@@ -31,8 +31,9 @@ internal object BCamSharedUpdater {
     private var controllerInstance: UpdaterController? by mutableStateOf(null)
     var experimental by mutableStateOf(false)
         private set
-    val guard = UpdateInstallGuard { true }
+    val guard = UpdateInstallGuard { !RecordService.isRunning }
     fun initialize(activity: ComponentActivity) {
+        if (controllerInstance != null) return
         experimental = AppUpdater.experimentalEnabled(activity)
         controllerInstance = newController(activity)
     }
