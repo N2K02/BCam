@@ -28,9 +28,11 @@ class RecordingNotificationActionsTest {
     @Test fun pauseAndResumeUseNativeActionsBoundToTheExistingServiceIntent() {
         val method = serviceSource().substringAfter("private fun buildNotification(): Notification {")
             .substringBefore("private fun updateNotification()")
-        assertTrue(method.contains("if (recording) {"))
-        assertTrue(method.contains("if (paused) Notification.Action.Builder(ic(R.drawable.ic_play), \"▶ Resume\", servicePi(ACTION_PAUSE_RESUME, 4))"))
-        assertTrue(method.contains("Notification.Action.Builder(ic(R.drawable.ic_pause), \"❚❚ Pause\", servicePi(ACTION_PAUSE_RESUME, 4))"))
+        assertTrue(method.contains("val resumeAction = RecordingPausePolicy.showsResume(paused, pauseWhenReady)"))
+        assertTrue(method.contains("if (resumeAction) Notification.Action.Builder(ic(R.drawable.ic_play), \"▶ Resume\", servicePi(ACTION_RESUME, 5))"))
+        assertTrue(method.contains("Notification.Action.Builder(ic(R.drawable.ic_pause), \"❚❚ Pause\", servicePi(ACTION_PAUSE, 4))"))
+        val controls = method.substringAfter("fun ic(res: Int)").substringBefore("b.setContentIntent(settingsPi())")
+        assertFalse("Pause must not disappear during startup", controls.contains("if (recording) {"))
         assertTrue(method.contains("b.setUsesChronometer(true)"))
     }
 

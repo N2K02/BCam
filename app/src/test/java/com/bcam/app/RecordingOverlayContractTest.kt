@@ -28,6 +28,9 @@ class RecordingOverlayContractTest {
     @Test fun overlayUsesIdempotentPauseResumeAndStopActions() {
         val overlay = source("OverlayControlService.kt")
         assertTrue(overlay.contains("RecordService.ACTION_RESUME else RecordService.ACTION_PAUSE"))
+        assertTrue(overlay.contains("RecordService.isPausePending -> renderPauseQueued()"))
+        assertTrue(overlay.contains("Pause recording when camera is ready"))
+        assertTrue(overlay.contains("Cancel pending pause"))
         assertTrue(overlay.contains(".setAction(RecordService.ACTION_STOP)"))
         assertTrue(overlay.contains("Close recording overlay, keep recording"))
         assertTrue(overlay.contains("positions.edit().putInt(\"x\""))
@@ -39,5 +42,8 @@ class RecordingOverlayContractTest {
         assertTrue(service.contains("isRunning = true\n                showOverlayIfEnabled()"))
         assertTrue(service.contains("dismissOverlay()"))
         assertTrue(service.contains("isRecordingActive = false"))
+        assertTrue(service.contains("ACTION_PAUSE -> if (isRunning) h.post { requestPause() }"))
+        assertTrue(service.contains("ACTION_RESUME -> if (isRunning) h.post { requestResume() }"))
+        assertTrue(service.contains("applyPendingPauseWhenReady()"))
     }
 }
