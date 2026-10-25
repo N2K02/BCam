@@ -64,7 +64,6 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
     val prefs = activity.getSharedPreferences(VideoSettings.PREFS, android.content.Context.MODE_PRIVATE)
     var facing by remember { mutableIntStateOf(prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)) }
     var resetDialog by remember { mutableStateOf(false) }
-    var quitDialog by remember { mutableStateOf(false) }
     val cameraManager = remember { activity.getSystemService(CameraManager::class.java) }
     val caps = remember {
         runCatching {
@@ -85,6 +84,16 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
     fun save() {
         settings.save(activity)
         prefs.edit().putInt(RecordService.KEY_FACING, facing).apply()
+    }
+    // The Quit action stops the recorder through its existing save/finalize path.
+    fun quitBCam() {
+        save()
+        BCamSharedUpdater.controller.cancel()
+        if (RecordService.isRunning) {
+            activity.startService(android.content.Intent(activity, RecordService::class.java)
+                .setAction(RecordService.ACTION_STOP))
+        }
+        activity.finishAndRemoveTask()
     }
     BackHandler(enabled = page != BCamPage.SETTINGS && page != BCamPage.HOME) {
         page = page.backDestination()
@@ -140,6 +149,13 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.Settings, "Settings") } },
                         label = { Text("Settings") },
                     )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { quitBCam() },
+                        icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
+                        label = { Text("Quit") },
+                        alwaysShowLabel = true,
+                    )
                 }
             }
         ) { insets ->
@@ -187,12 +203,6 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                             leadingContent = { Icon(icon, null) },
                             modifier = Modifier.clickable { page = destination })
                     }
-                    ListItem(
-                        headlineContent = { Text("Close settings") },
-                        supportingContent = { Text("Return to the previous screen") },
-                        leadingContent = { Icon(Icons.Rounded.ExitToApp, null) },
-                        modifier = Modifier.clickable { quitDialog = true },
-                    )
                     Text("Opening Settings stops recording and saves the current video.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -248,18 +258,6 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             }
             }
         }
-        if (quitDialog) AlertDialog(
-            onDismissRequest = { quitDialog = false },
-            title = { Text("Close BCam settings?") },
-            text = { Text("Opening Settings stops recording and saves the current video. Close settings?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    quitDialog = false
-                    activity.finish()
-                }) { Text("Close") }
-            },
-            dismissButton = { TextButton(onClick = { quitDialog = false }) { Text("Cancel") } }
-        )
         if (resetDialog) AlertDialog(onDismissRequest = { resetDialog = false },
             title = { Text("Reset video settings?") },
             text = { Text("Restore the default recording settings?") },
