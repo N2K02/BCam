@@ -1,0 +1,44 @@
+name: Guard shared updater compatibility
+
+on: [pull_request, push, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  updater-version:
+    name: Require n2k02updater 0.1.19+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned updater and Gradle build gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          build = Path("app/build.gradle.kts")
+          if not build.is_file():
+              raise SystemExit("::error::Missing app/build.gradle.kts")
+          source = build.read_text()
+          if 'tasks.register("verifySharedUpdaterVersion")' not in source or 'dependsOn(verifySharedUpdaterVersion)' not in source:
+              raise SystemExit("::error::Android preBuild/check must depend on verifySharedUpdaterVersion")
+
+          pattern = re.compile(r'\b(?:implementation|api|compileOnly|runtimeOnly|\w+Implementation)\s*\(\s*["\x27]dev\.n2k02:updater:([^"\x27]+)["\x27]\s*\)')
+          versions = []
+          for line in source.splitlines():
+              if line.lstrip().startswith("//"):
+                  continue
+              match = pattern.search(line)
+              if match:
+                  versions.append(match.group(1))
+          if not versions:
+              raise SystemExit("::error::Missing pinned dev.n2k02:updater dependency")
+          for version in versions:
+              if not re.fullmatch(r"\d+(?:\.\d+){2,}", version):
+                  raise SystemExit(f"::error::Updater version '{version}' must be a pinned numeric release")
+              if tuple(map(int, version.split("."))) < (0, 1, 19):
+                  raise SystemExit(f"::error::Outdated n2k02updater {version}: minimum is 0.1.19")
+          print("Updater dependency passes minimum 0.1.19, with Android build gate wired.")
+          PY
