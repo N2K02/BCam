@@ -19,7 +19,7 @@ class BCamPageTest {
         for (page in listOf(BCamPage.RECORDING, BCamPage.AUDIO_FILES)) {
             assertTrue(page.isSettingsPage)
             assertFalse(page.showsSettingsIcon)
-            assertFalse(page.showsAppBranding)
+            assertTrue(page.showsAppBranding)
             assertEquals(BCamPage.SETTINGS, page.backDestination())
         }
         assertEquals("Recording", BCamPage.RECORDING.title)
@@ -28,10 +28,19 @@ class BCamPageTest {
 
     @Test fun updaterHasHostOwnedTitleWithoutExtraBranding() {
         assertEquals("About & updates", BCamPage.UPDATES.title)
-        assertFalse(BCamPage.UPDATES.isSettingsPage)
-        assertFalse(BCamPage.UPDATES.showsAppBranding)
+        assertTrue(BCamPage.UPDATES.isSettingsPage)
+        assertTrue(BCamPage.UPDATES.showsAppBranding)
         assertFalse(BCamPage.UPDATES.showsSettingsIcon)
         assertEquals(BCamPage.SETTINGS, BCamPage.UPDATES.backDestination())
+    }
+
+    @Test fun mainNavigationHasHomeAndNestedSettings() {
+        assertEquals("Home", BCamPage.HOME.title)
+        assertFalse(BCamPage.HOME.isSettingsPage)
+        assertTrue(BCamPage.HOME.showsAppBranding)
+        assertTrue(BCamPage.RECORDING.isSettingsPage)
+        assertTrue(BCamPage.AUDIO_FILES.isSettingsPage)
+        assertTrue(BCamPage.UPDATES.isSettingsPage)
     }
 
     @Test fun openingSettingsStopsAndSavesActiveRecording() {
