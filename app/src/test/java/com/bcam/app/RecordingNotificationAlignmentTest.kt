@@ -19,8 +19,9 @@ class RecordingNotificationAlignmentTest {
             File("app/src/main/res/layout/notification_recording.xml"),
             File("../app/src/main/res/layout/notification_recording.xml"),
         ).firstOrNull { it.isFile } ?: error("Notification layout missing")
-        val root = DocumentBuilderFactory.newInstance().newDocumentBuilder()
-            .parse(file).documentElement
+        val root = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }.newDocumentBuilder().parse(file).documentElement
         val android = "http://schemas.android.com/apk/res/android"
         assertEquals("center", root.getAttributeNS(android, "gravity"))
 
