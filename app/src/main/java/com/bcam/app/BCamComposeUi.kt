@@ -187,12 +187,6 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                             leadingContent = { Icon(icon, null) },
                             modifier = Modifier.clickable { page = destination })
                     }
-                    HorizontalDivider()
-                    ListItem(headlineContent = { Text("About & updates") },
-                        supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
-                        leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
-                        trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
-                        modifier = Modifier.clickable { page = BCamPage.UPDATES })
                     ListItem(
                         headlineContent = { Text("Close settings") },
                         supportingContent = { Text("Return to the previous screen") },
@@ -203,6 +197,13 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    HorizontalDivider()
+                    ListItem(headlineContent = { Text("About & updates") },
+                        supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
+                        leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
+                        trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
+                        modifier = Modifier.clickable { page = BCamPage.UPDATES })
+
                 } else {
                     if (page == BCamPage.RECORDING) {
                     if (caps.third) ChoiceRow("Camera", if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front camera" else "Back camera",
