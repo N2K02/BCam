@@ -111,7 +111,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                     NavigationBarItem(selected = tab == 0, onClick = { tab = 0; section = "Overview" },
                         icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.Settings, "Settings") } }, label = { Text("Settings") })
                     NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
-                        icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.SystemUpdate, "Updates") } }, label = { Text("Updates") })
+                        icon = { Icon(Icons.Rounded.SystemUpdate, "Updates") }, label = { Text("Updates") })
                     NavigationBarItem(selected = false, onClick = { quitDialog = true },
                         icon = { Icon(Icons.Rounded.ExitToApp, null) }, label = { Text("Quit") })
                 }
@@ -120,7 +120,6 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             Column(Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (tab == 0 && section == "Overview") {
-                    Text("Settings", style = MaterialTheme.typography.headlineMedium)
                     listOf(
                         Triple("Recording", "Camera, resolution, frame rate and quality", Icons.Rounded.Videocam),
                         Triple("Audio & files", "Sound, file segments and auto-stop", Icons.Rounded.Settings),
@@ -128,7 +127,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         Surface(onClick = { section = title }, shape = MaterialTheme.shapes.extraLarge,
                             color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                             ListItem(headlineContent = { Text(title) }, supportingContent = { Text(subtitle) },
-                                leadingContent = { Icon(icon, null) }, trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) })
+                                leadingContent = { Icon(icon, null) })
                         }
                     }
                     Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.extraLarge,
@@ -136,7 +135,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         ListItem(headlineContent = { Text("About & updates") },
                             supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
                             leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
-                            trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
+                            trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) })
                     }
                 } else if (tab == 0) {
                     Text("‹ Settings", modifier = Modifier.fillMaxWidth().clickable { section = "Overview" }.padding(vertical = 8.dp),
