@@ -13,8 +13,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.view.View
-import android.widget.RemoteViews
+import android.graphics.drawable.Icon
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -288,13 +287,20 @@ class RecordService : Service() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-        // Android controls the alignment of default Notification.Action labels.
-        // A decorated custom view centers all text and gives each action equal
-        // horizontal space, with large touch targets even on narrow screens.
-        b.setStyle(Notification.DecoratedCustomViewStyle())
-            .setCustomContentView(recordingNotificationViews(title, text, recording, expanded = false))
-            .setCustomBigContentView(recordingNotificationViews(title, text, recording, expanded = true))
-            .setContentIntent(settingsPi())
+        // Android shows at most 3 buttons: Pause/Resume, Stop, Settings (the camera is chosen in
+        // Settings). Tapping the notification opens Settings too.
+        // Most phones show only the button text, so each label starts with a symbol; the icon is
+        // used where Android does show it (some phones, watches).
+        fun ic(res: Int) = Icon.createWithResource(this, res)
+        if (recording) {
+            b.addAction(
+                if (paused) Notification.Action.Builder(ic(R.drawable.ic_play), "▶ Resume", servicePi(ACTION_PAUSE_RESUME, 4)).build()
+                else Notification.Action.Builder(ic(R.drawable.ic_pause), "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
+            )
+        }
+        b.addAction(Notification.Action.Builder(ic(R.drawable.ic_stop), "■ Stop", servicePi(ACTION_STOP, 1)).build())
+        b.addAction(Notification.Action.Builder(ic(R.drawable.ic_settings), "⚙ Settings", settingsPi()).build())
+        b.setContentIntent(settingsPi())
         if (recording && !paused) {
             // Timer shows recorded time: pauses are skipped.
             b.setUsesChronometer(true).setShowWhen(true).setWhen(partStartWall + pausedTotalMs)
@@ -305,25 +311,6 @@ class RecordService : Service() {
             b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
         return b.build()
-    }
-
-    /** Keep compact and expanded notifications in sync with the recorder state. */
-    private fun recordingNotificationViews(
-        title: String,
-        detail: String,
-        recording: Boolean,
-        expanded: Boolean,
-    ): RemoteViews = RemoteViews(packageName, R.layout.notification_recording).apply {
-        setTextViewText(R.id.notification_title, title)
-        setTextViewText(R.id.notification_detail, detail)
-        setViewVisibility(R.id.notification_actions, if (expanded) View.VISIBLE else View.GONE)
-        // Pause/Resume is unavailable until the recorder actually starts.
-        setViewVisibility(R.id.notification_pause, if (recording) View.VISIBLE else View.GONE)
-        setTextViewText(R.id.notification_pause, if (paused) "▶ Resume" else "❚❚ Pause")
-        setOnClickPendingIntent(R.id.notification_root, settingsPi())
-        setOnClickPendingIntent(R.id.notification_pause, servicePi(ACTION_PAUSE_RESUME, 4))
-        setOnClickPendingIntent(R.id.notification_stop, servicePi(ACTION_STOP, 1))
-        setOnClickPendingIntent(R.id.notification_settings, settingsPi())
     }
 
     private fun updateNotification() {
