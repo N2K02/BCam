@@ -10,10 +10,23 @@ class SettingsActivity : ComponentActivity() {
     companion object { const val EXTRA_CHECK_UPDATES = "check_updates" }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stopRecordingOnEntry()
         BCamSharedUpdater.initialize(this)
         setContent { BCamMaterialScreen(this, startUpdates = intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false),
             checkNow = intent.getBooleanExtra(EXTRA_CHECK_UPDATES, false)) }
     }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        stopRecordingOnEntry()
+    }
+
+    private fun stopRecordingOnEntry() {
+        stopActionWhenOpeningSettings(RecordService.isRunning)?.let { action ->
+            startService(Intent(this, RecordService::class.java).setAction(action))
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         BCamSharedUpdater.controller.onHostResume(this, BCamSharedUpdater.guard)

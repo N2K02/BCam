@@ -1,13 +1,12 @@
 package com.bcam.app
 
-import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.MediaRecorder
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,7 +17,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import dev.n2k02.updater.PublishedUpdateSource
@@ -61,8 +59,7 @@ internal object BCamSharedUpdater {
 @Composable
 internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boolean = false, checkNow: Boolean = false) {
     val updateStatus by BCamSharedUpdater.controller.status.collectAsState()
-    var tab by remember { mutableIntStateOf(if (startUpdates) 1 else 0) }
-    var section by remember { mutableStateOf("Overview") }
+    var page by rememberSaveable { mutableStateOf(if (startUpdates) BCamPage.UPDATES else BCamPage.SETTINGS) }
     var settings by remember { mutableStateOf(VideoSettings.load(activity)) }
     val prefs = activity.getSharedPreferences(VideoSettings.PREFS, android.content.Context.MODE_PRIVATE)
     var facing by remember { mutableIntStateOf(prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)) }
@@ -84,40 +81,59 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             Triple(maxHeight, has60, faces.size > 1)
         }.getOrDefault(Triple(1080, false, false))
     }
+    // Settings stops recording on entry; changes take effect next time it starts.
     fun save() {
-        val changed = settings != VideoSettings.load(activity)
-        val switched = facing != prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)
         settings.save(activity)
         prefs.edit().putInt(RecordService.KEY_FACING, facing).apply()
-        if ((changed || switched) && RecordService.isRunning) {
-            activity.startService(Intent(activity, RecordService::class.java).setAction(RecordService.ACTION_APPLY_SETTINGS))
-        }
     }
-    // Back traverses the BCam settings hierarchy before leaving this activity.
-    BackHandler(enabled = tab == 1 || section != "Overview") {
-        if (tab == 1) {
-            tab = 0
-            section = "Overview"
-        } else {
-            section = "Overview"
-        }
+    BackHandler(enabled = page != BCamPage.SETTINGS) {
+        page = page.backDestination()
     }
     // Match MRadio: the shared N2K02Theme owns system day/night and Material You colors.
     dev.n2k02.theme.N2K02Theme {
         Scaffold(
-            topBar = { CenterAlignedTopAppBar(title = { if (tab == 1) dev.n2k02.updater.N2K02UpdateTitle() else Text(if (section == "Overview") "Settings" else section) }) },
+            topBar = {
+                // One host-owned header at every depth, matching mRadio settings.
+                TopAppBar(
+                    title = {
+                        when {
+                            page == BCamPage.UPDATES -> dev.n2k02.updater.N2K02UpdateTitle()
+                            page.showsSettingsIcon -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(start = 8.dp),
+                            ) {
+                                Icon(Icons.Rounded.Settings, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary)
+                                Text(page.title)
+                            }
+                            else -> Text(page.title)
+                        }
+                    },
+                    actions = {
+                        if (page.showsAppBranding) {
+                            dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
+                            Text("BCam", modifier = Modifier.padding(start = 6.dp, end = 16.dp),
+                                style = MaterialTheme.typography.titleMedium)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            },
             bottomBar = {
                 NavigationBar {
-                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0; section = "Overview" },
+                    NavigationBarItem(selected = page.isSettingsPage, onClick = { page = BCamPage.SETTINGS },
                         icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.Settings, "Settings") } }, label = { Text("Settings") })
-                    NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
+                    NavigationBarItem(selected = page == BCamPage.UPDATES, onClick = { page = BCamPage.UPDATES },
                         icon = { Icon(Icons.Rounded.SystemUpdate, "Updates") }, label = { Text("Updates") })
                     NavigationBarItem(selected = false, onClick = { quitDialog = true },
                         icon = { Icon(Icons.Rounded.ExitToApp, null) }, label = { Text("Quit") })
                 }
             }
         ) { insets ->
-            if (tab == 1) {
+            if (page == BCamPage.UPDATES) {
                 // Standalone updater owns scrolling and receives the Scaffold
                 // bottom-bar inset. Avoid a scrollable Column inside another.
                 dev.n2k02.updater.N2K02UpdatePage(
@@ -129,31 +145,33 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                 )
             } else {
             Column(Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (section == "Overview") {
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (page == BCamPage.SETTINGS) {
+                    Text("Configure your camera", style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 12.dp))
                     listOf(
-                        Triple("Recording", "Camera, resolution, frame rate and quality", Icons.Rounded.Videocam),
-                        Triple("Audio & files", "Sound, file segments and auto-stop", Icons.Rounded.Settings),
-                    ).forEach { (title, subtitle, icon) ->
-                        Surface(onClick = { section = title }, shape = MaterialTheme.shapes.extraLarge,
-                            color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-                            ListItem(headlineContent = { Text(title) }, supportingContent = { Text(subtitle) },
-                                leadingContent = { Icon(icon, null) })
-                        }
+                        Triple(BCamPage.RECORDING, "Camera, resolution, frame rate and quality", Icons.Rounded.Videocam),
+                        Triple(BCamPage.AUDIO_FILES, "Sound, file segments and auto-stop", Icons.Rounded.Settings),
+                    ).forEach { (destination, subtitle, icon) ->
+                        ListItem(headlineContent = { Text(destination.title) },
+                            supportingContent = { Text(subtitle) },
+                            leadingContent = { Icon(icon, null) },
+                            modifier = Modifier.clickable { page = destination })
                     }
-                    Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.extraLarge,
-                        color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-                        ListItem(headlineContent = { Text("About & updates") },
-                            supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
-                            leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
-                            trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) })
-                    }
-                } else if (tab == 0) {
-                    Text("‹ Settings", modifier = Modifier.fillMaxWidth().clickable { section = "Overview" }.padding(vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium)
-                    Text(section, style = MaterialTheme.typography.headlineSmall)
-                    if (section == "Recording") {
-                    Text("Recording", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    HorizontalDivider()
+                    ListItem(headlineContent = { Text("About & updates") },
+                        supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
+                        leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
+                        trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
+                        modifier = Modifier.clickable { page = BCamPage.UPDATES })
+                    Text("Opening Settings stops recording and saves the current video.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                } else {
+                    if (page == BCamPage.RECORDING) {
                     if (caps.third) ChoiceRow("Camera", if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front camera" else "Back camera",
                         listOf("Back camera", "Front camera")) {
                         facing = if (it == "Front camera") CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK
@@ -173,7 +191,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         settings = settings.copy(preferHevc = it.startsWith("H.265"))
                     }
                     }
-                    if (section == "Audio & files") {
+                    if (page == BCamPage.AUDIO_FILES) {
                     ChoiceRow("Sound", if (settings.audio) "On" else "Off", listOf("On", "Off")) {
                         settings = settings.copy(audio = it == "On")
                     }
@@ -198,19 +216,13 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
         }
         if (quitDialog) AlertDialog(
             onDismissRequest = { quitDialog = false },
-            title = { Text(if (RecordService.isRunning) "Quit without saving?" else "Quit BCam?") },
-            text = { Text(if (RecordService.isRunning)
-                "Stop recording and discard the current video segment? Earlier completed segments remain saved."
-                else "Close BCam settings?") },
+            title = { Text("Close BCam settings?") },
+            text = { Text("Opening Settings stops recording and saves the current video. Close settings?") },
             confirmButton = {
                 TextButton(onClick = {
                     quitDialog = false
-                    if (RecordService.isRunning) {
-                        activity.startService(Intent(activity, RecordService::class.java)
-                            .setAction(RecordService.ACTION_DISCARD_CURRENT))
-                    }
                     activity.finish()
-                }) { Text(if (RecordService.isRunning) "Discard & quit" else "Quit") }
+                }) { Text("Close") }
             },
             dismissButton = { TextButton(onClick = { quitDialog = false }) { Text("Cancel") } }
         )
