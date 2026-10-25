@@ -96,26 +96,29 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                 // One host-owned header at every depth, matching mRadio settings.
                 TopAppBar(
                     title = {
-                        when {
-                            page == BCamPage.UPDATES -> dev.n2k02.updater.N2K02UpdateTitle()
-                            page.showsSettingsIcon -> Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.padding(start = 8.dp),
-                            ) {
-                                Icon(Icons.Rounded.Settings, contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary)
-                                Text(page.title)
-                            }
-                            else -> Text(page.title)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(start = 8.dp),
+                        ) {
+                            Icon(
+                                when (page) {
+                                    BCamPage.SETTINGS -> Icons.Rounded.Settings
+                                    BCamPage.RECORDING -> Icons.Rounded.Videocam
+                                    BCamPage.AUDIO_FILES -> Icons.Rounded.AudioFile
+                                    BCamPage.UPDATES -> Icons.Rounded.SystemUpdate
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Text(page.title, maxLines = 1)
                         }
                     },
                     actions = {
-                        if (page.showsAppBranding) {
-                            dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
-                            Text("BCam", modifier = Modifier.padding(start = 6.dp, end = 16.dp),
-                                style = MaterialTheme.typography.titleMedium)
-                        }
+                        dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
+                        Text("BCam", modifier = Modifier.padding(start = 6.dp, end = 16.dp),
+                            style = MaterialTheme.typography.titleMedium)
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
