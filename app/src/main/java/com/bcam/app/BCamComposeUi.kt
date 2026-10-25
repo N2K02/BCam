@@ -117,9 +117,20 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                 }
             }
         ) { insets ->
+            if (tab == 1) {
+                // Standalone updater owns scrolling and receives the Scaffold
+                // bottom-bar inset. Avoid a scrollable Column inside another.
+                dev.n2k02.updater.N2K02UpdatePage(
+                    controller = BCamSharedUpdater.controller,
+                    installGuard = BCamSharedUpdater.guard,
+                    modifier = Modifier.fillMaxSize().padding(insets),
+                    experimentalEnabled = BCamSharedUpdater.experimental,
+                    onExperimentalEnabledChange = { BCamSharedUpdater.toggle(activity, it) },
+                )
+            } else {
             Column(Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (tab == 0 && section == "Overview") {
+                if (section == "Overview") {
                     listOf(
                         Triple("Recording", "Camera, resolution, frame rate and quality", Icons.Rounded.Videocam),
                         Triple("Audio & files", "Sound, file segments and auto-stop", Icons.Rounded.Settings),
@@ -181,15 +192,8 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         OutlinedButton(onClick = { resetDialog = true }, modifier = Modifier.weight(1f)) { Text("Reset") }
                         Button(onClick = { save(); activity.finish() }, modifier = Modifier.weight(1.5f)) { Text("Save changes") }
                     }
-                } else {
-                    dev.n2k02.updater.N2K02UpdateScreen(
-                        controller = BCamSharedUpdater.controller,
-                        installGuard = BCamSharedUpdater.guard,
-                        modifier = Modifier.padding(horizontal = 0.dp, vertical = 8.dp),
-                        experimentalEnabled = BCamSharedUpdater.experimental,
-                        onExperimentalEnabledChange = { BCamSharedUpdater.toggle(activity, it) },
-                    )
                 }
+            }
             }
         }
         if (quitDialog) AlertDialog(
