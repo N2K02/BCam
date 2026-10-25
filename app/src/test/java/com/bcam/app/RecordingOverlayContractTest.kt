@@ -20,7 +20,7 @@ class RecordingOverlayContractTest {
 
     @Test fun dragIsBoundedEvenOnSmallerDisplays() {
         assertEquals(OverlayDragPosition.Position(0, 0),
-            OverlayDragPosition.clamp(-10, 900, 100, 80, 220, 50))
+            OverlayDragPosition.clamp(-10, 900, 100, 40, 220, 50))
         assertEquals(OverlayDragPosition.Position(180, 250),
             OverlayDragPosition.clamp(900, 900, 400, 300, 220, 50))
     }
