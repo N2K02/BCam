@@ -128,7 +128,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         Surface(onClick = { section = title }, shape = MaterialTheme.shapes.extraLarge,
                             color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                             ListItem(headlineContent = { Text(title) }, supportingContent = { Text(subtitle) },
-                                leadingContent = { Icon(icon, null) }, trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) })
+                                leadingContent = { Icon(icon, null) })
                         }
                     }
                     Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.extraLarge,
@@ -136,7 +136,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         ListItem(headlineContent = { Text("About & updates") },
                             supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
                             leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
-                            trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
+                            trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) })
                     }
                 } else if (tab == 0) {
                     Text("‹ Settings", modifier = Modifier.fillMaxWidth().clickable { section = "Overview" }.padding(vertical = 8.dp),
