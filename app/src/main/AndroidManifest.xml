@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Optional Android special access for floating recording controls. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Checks GitHub for app updates -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Installs its own updates (Android asks the user first) -->
@@ -57,6 +59,10 @@
             android:authorities="${applicationId}.updates"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <service
+            android:name=".OverlayControlService"
+            android:exported="false" />
 
         <service
             android:name=".RecordService"

@@ -17,6 +17,7 @@ android {
         applicationId = "com.bcam.app"
         minSdk = 26
         targetSdk = 34
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // One decimal place: 1.0, 1.1 … 1.9, 2.0. versionCode 1.4 -> 14 (always goes up).
         versionName = appVersion + ((findProperty("appVersionSuffix") as String?) ?: "")
         versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: appVersionCode
@@ -50,6 +51,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
  
