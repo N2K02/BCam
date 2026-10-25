@@ -52,6 +52,7 @@ class OverlayControlService : Service() {
             }
             when {
                 stopping -> renderSaving()
+                RecordService.isPausePending -> renderPauseQueued()
                 !RecordService.isRecordingActive -> renderPreparing()
                 RecordService.isPaused -> renderPaused()
                 else -> renderRecording()
@@ -106,9 +107,11 @@ class OverlayControlService : Service() {
             background = ColorDrawable(Color.TRANSPARENT)
             setColorFilter(Color.WHITE)
             setOnClickListener {
-                if (stopping || !RecordService.isRecordingActive) return@setOnClickListener
+                if (stopping || !RecordService.isRunning) return@setOnClickListener
                 isEnabled = false
-                val action = if (RecordService.isPaused) RecordService.ACTION_RESUME else RecordService.ACTION_PAUSE
+                val action = if (RecordingPausePolicy.showsResume(
+                        RecordService.isPaused, RecordService.isPausePending))
+                    RecordService.ACTION_RESUME else RecordService.ACTION_PAUSE
                 startService(Intent(this@OverlayControlService, RecordService::class.java).setAction(action))
             }
         }
@@ -262,11 +265,26 @@ class OverlayControlService : Service() {
         }
         pauseButton?.apply {
             setImageResource(android.R.drawable.ic_media_pause)
-            contentDescription = "Recording not yet ready"
-            isEnabled = false
-            alpha = 0.45f
+            contentDescription = "Pause recording when camera is ready"
+            isEnabled = true
+            alpha = 1f
         }
         // A stalled camera may still need to be stopped before capture starts.
+        stopButton?.apply { isEnabled = true; alpha = 1f }
+    }
+
+    private fun renderPauseQueued() {
+        stopBlinking()
+        statusDot?.apply {
+            setStatusColor(0xFFFF9800.toInt())
+            contentDescription = "Pause queued until camera starts"
+        }
+        pauseButton?.apply {
+            setImageResource(android.R.drawable.ic_media_play)
+            contentDescription = "Cancel pending pause"
+            isEnabled = true
+            alpha = 1f
+        }
         stopButton?.apply { isEnabled = true; alpha = 1f }
     }
 

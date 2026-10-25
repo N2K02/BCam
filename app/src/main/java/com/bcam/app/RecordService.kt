@@ -91,6 +91,9 @@ class RecordService : Service() {
             private set
         @Volatile var isRecordingActive = false
             private set
+        /** True if Pause was tapped before the camera recorder became ready. */
+        @Volatile var isPausePending = false
+            private set
     }
 
     /** Where one part is written. Android 10+: MediaStore (Movies/BCam, shows in Gallery). */
@@ -152,6 +155,9 @@ class RecordService : Service() {
     private var activeFps = 30
     private var status = "Starting…"
     private var paused = false
+    /** Owned by the camera handler thread. */
+    private var pauseWhenReady = false
+    private var pauseError: String? = null
     private var pausedAt = 0L          // wall time when the current pause began
     private var pausedTotalMs = 0L     // pauses in the current part, so the timer shows recorded time
     private var repeating: CaptureRequest? = null
@@ -209,9 +215,12 @@ class RecordService : Service() {
                 h.post { shutdown(userStopped = true) }
             }
             ACTION_SWITCH -> if (isRunning) h.post { switchCamera() }
-            ACTION_PAUSE_RESUME -> if (isRunning) h.post { togglePause() }
-            ACTION_PAUSE -> if (isRunning) h.post { if (!paused) togglePause() }
-            ACTION_RESUME -> if (isRunning) h.post { if (paused) togglePause() }
+            ACTION_PAUSE_RESUME -> if (isRunning) h.post {
+                if (RecordingPausePolicy.showsResume(paused, pauseWhenReady)) requestResume()
+                else requestPause()
+            }
+            ACTION_PAUSE -> if (isRunning) h.post { requestPause() }
+            ACTION_RESUME -> if (isRunning) h.post { requestResume() }
             ACTION_APPLY_SETTINGS -> if (isRunning) h.post { applySettings() } else stopSelf()
             else -> if (!isRunning) stopSelf()
         }
@@ -227,6 +236,7 @@ class RecordService : Service() {
         isRunning = false
         isRecordingActive = false
         isPaused = false
+        isPausePending = false
         super.onDestroy()
     }
 
@@ -284,6 +294,7 @@ class RecordService : Service() {
     private fun buildNotification(): Notification {
         val camName = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"
         val recording = recStarted
+        val resumeAction = RecordingPausePolicy.showsResume(paused, pauseWhenReady)
         val title = when {
             recording && paused -> "❚❚ Paused · $camName camera · Part $part"
             recording -> "● REC · $camName camera · Part $part"
@@ -293,9 +304,11 @@ class RecordService : Service() {
         val res = activeSize?.let { "${minOf(it.width, it.height)}p$activeFps · " } ?: ""
         val mute = if (withAudio) "" else " · no sound"
         val text = when {
+            pauseWhenReady -> "Pause queued · waiting for the camera to be ready"
             recording && paused -> "Tap Resume to continue in the same file"
-            recording -> "$res$codec$mute · new file about every ${settings.segmentMinutes} min · tap for settings"
-            else -> "$camName camera · tap for settings"
+            recording && pauseError != null -> pauseError!!
+            recording -> "$res$codec$mute · new file about every ${settings.segmentMinutes} min"
+            else -> "$status · $camName camera"
         }
 
         val b = Notification.Builder(this, CHANNEL)
@@ -312,12 +325,12 @@ class RecordService : Service() {
         // Most phones show only the button text, so each label starts with a symbol; the icon is
         // used where Android does show it (some phones, watches).
         fun ic(res: Int) = Icon.createWithResource(this, res)
-        if (recording) {
-            b.addAction(
-                if (paused) Notification.Action.Builder(ic(R.drawable.ic_play), "▶ Resume", servicePi(ACTION_PAUSE_RESUME, 4)).build()
-                else Notification.Action.Builder(ic(R.drawable.ic_pause), "❚❚ Pause", servicePi(ACTION_PAUSE_RESUME, 4)).build(),
-            )
-        }
+        // Always expose Pause, even before the first camera frame. The command will
+        // queue safely until MediaRecorder is ready; it cannot silently disappear.
+        b.addAction(
+            if (resumeAction) Notification.Action.Builder(ic(R.drawable.ic_play), "▶ Resume", servicePi(ACTION_RESUME, 5)).build()
+            else Notification.Action.Builder(ic(R.drawable.ic_pause), "❚❚ Pause", servicePi(ACTION_PAUSE, 4)).build(),
+        )
         b.addAction(Notification.Action.Builder(ic(R.drawable.ic_stop), "■ Stop", servicePi(ACTION_STOP, 1)).build())
         b.addAction(Notification.Action.Builder(ic(R.drawable.ic_settings), "⚙ Settings", settingsPi()).build())
         b.setContentIntent(settingsPi())
@@ -465,13 +478,16 @@ class RecordService : Service() {
                         recStarted = true
                         isRecordingActive = true
                         paused = false
-        isPaused = false
+                        isPaused = false
+                        pauseError = null
                         pausedTotalMs = 0L
                         part++
                         partStartElapsed = SystemClock.elapsedRealtime()
                         partStartWall = System.currentTimeMillis()
                         status = "Recording"
                         updateNotification()
+                        // Avoid MediaRecorder.pause() racing its first frames.
+                        applyPendingPauseWhenReady()
                     } catch (e: Exception) {
                         Log.e(TAG, "Start recording failed", e)
                         finishPart()
@@ -691,11 +707,53 @@ class RecordService : Service() {
         orientationListener = null
     }
 
+    /** Pause taps during camera startup are remembered instead of ignored. */
+    private fun requestPause() {
+        if (stopped || !isRunning || paused || pauseWhenReady) return
+        if (recStarted && recorder != null &&
+            RecordingPausePolicy.pauseDelayMs(partStartElapsed, SystemClock.elapsedRealtime()) == 0L) {
+            togglePause()
+            return
+        }
+        pauseWhenReady = true
+        isPausePending = true
+        pauseError = null
+        updateNotification()
+        applyPendingPauseWhenReady()
+    }
+
+    /** Cancel the pending pause, or resume the current recording in the same file. */
+    private fun requestResume() {
+        if (stopped || !isRunning) return
+        if (pauseWhenReady) {
+            pauseWhenReady = false
+            isPausePending = false
+            pauseError = null
+            updateNotification()
+        } else if (paused) {
+            togglePause()
+        }
+    }
+
+    /** This method runs only on the camera worker, never on an overlay UI thread. */
+    private fun applyPendingPauseWhenReady() {
+        if (!pauseWhenReady || stopped || !isRunning || !recStarted || recorder == null) return
+        val delay = RecordingPausePolicy.pauseDelayMs(partStartElapsed, SystemClock.elapsedRealtime())
+        if (delay > 0L) {
+            h.postDelayed({ applyPendingPauseWhenReady() }, delay)
+            return
+        }
+        pauseWhenReady = false
+        isPausePending = false
+        togglePause()
+    }
+
     /** Pause: the recorder pauses (same file) and the camera stops sending frames. Resume continues. */
     private fun togglePause() {
         val mr = recorder ?: return
         if (stopped || !recStarted) return
         try {
+            pauseError = null
             if (!paused) {
                 mr.pause()
                 runCatching { session?.stopRepeating() }
@@ -714,8 +772,10 @@ class RecordService : Service() {
                 status = "Recording"
             }
         } catch (e: Exception) {
+            val operation = if (paused) "resume" else "pause"
+            pauseError = "Couldn't $operation video: ${e.message ?: "camera recorder rejected command"}"
             Log.e(TAG, "Pause/resume failed", e)
-            main.post { Toast.makeText(this, "BCam: couldn't ${if (paused) "resume" else "pause"} (${e.message})", Toast.LENGTH_SHORT).show() }
+            main.post { Toast.makeText(this, "BCam: $pauseError", Toast.LENGTH_LONG).show() }
         }
         updateNotification()
     }
@@ -831,6 +891,8 @@ class RecordService : Service() {
         if (stopped) return
         stopped = true
         h.removeCallbacksAndMessages(null)
+        pauseWhenReady = false
+        isPausePending = false
         finishPart(discard = discardCurrent)
         closeCamera()
         val saved = savedParts
