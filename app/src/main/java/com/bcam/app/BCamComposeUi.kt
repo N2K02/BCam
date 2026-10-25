@@ -86,7 +86,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
         settings.save(activity)
         prefs.edit().putInt(RecordService.KEY_FACING, facing).apply()
     }
-    BackHandler(enabled = page != BCamPage.SETTINGS) {
+    BackHandler(enabled = page != BCamPage.SETTINGS && page != BCamPage.HOME) {
         page = page.backDestination()
     }
     // Match MRadio: the shared N2K02Theme owns system day/night and Material You colors.
@@ -103,6 +103,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         ) {
                             Icon(
                                 when (page) {
+                                    BCamPage.HOME -> Icons.Rounded.Home
                                     BCamPage.SETTINGS -> Icons.Rounded.Settings
                                     BCamPage.RECORDING -> Icons.Rounded.Videocam
                                     BCamPage.AUDIO_FILES -> Icons.Rounded.AudioFile
@@ -127,12 +128,18 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             },
             bottomBar = {
                 NavigationBar {
-                    NavigationBarItem(selected = page.isSettingsPage, onClick = { page = BCamPage.SETTINGS },
-                        icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.Settings, "Settings") } }, label = { Text("Settings") })
-                    NavigationBarItem(selected = page == BCamPage.UPDATES, onClick = { page = BCamPage.UPDATES },
-                        icon = { Icon(Icons.Rounded.SystemUpdate, "Updates") }, label = { Text("Updates") })
-                    NavigationBarItem(selected = false, onClick = { quitDialog = true },
-                        icon = { Icon(Icons.Rounded.ExitToApp, null) }, label = { Text("Quit") })
+                    NavigationBarItem(
+                        selected = page == BCamPage.HOME,
+                        onClick = { page = BCamPage.HOME },
+                        icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
+                        label = { Text("Home") },
+                    )
+                    NavigationBarItem(
+                        selected = page.isSettingsPage,
+                        onClick = { page = BCamPage.SETTINGS },
+                        icon = { dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) { Icon(Icons.Rounded.Settings, "Settings") } },
+                        label = { Text("Settings") },
+                    )
                 }
             }
         ) { insets ->
@@ -150,7 +157,24 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
             Column(Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (page == BCamPage.SETTINGS) {
+                if (page == BCamPage.HOME) {
+                    ListItem(
+                        headlineContent = { Text("Background recording") },
+                        supportingContent = { Text("Start the recorder explicitly; settings changes never start recording automatically.") },
+                        leadingContent = { Icon(Icons.Rounded.Videocam, null) },
+                    )
+                    Button(
+                        onClick = {
+                            activity.startActivity(android.content.Intent(activity, MainActivity::class.java))
+                            activity.finish()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text("Start or manage recording")
+                    }
+                } else if (page == BCamPage.SETTINGS) {
                     Text("Configure your camera", style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 12.dp))
@@ -169,6 +193,12 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
                         trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
                         modifier = Modifier.clickable { page = BCamPage.UPDATES })
+                    ListItem(
+                        headlineContent = { Text("Close settings") },
+                        supportingContent = { Text("Return to the previous screen") },
+                        leadingContent = { Icon(Icons.Rounded.ExitToApp, null) },
+                        modifier = Modifier.clickable { quitDialog = true },
+                    )
                     Text("Opening Settings stops recording and saves the current video.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
