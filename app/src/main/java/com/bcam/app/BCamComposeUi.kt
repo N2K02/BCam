@@ -105,7 +105,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
     // Match MRadio: the shared N2K02Theme owns system day/night and Material You colors.
     dev.n2k02.theme.N2K02Theme {
         Scaffold(
-            topBar = { CenterAlignedTopAppBar(title = { Text(if (tab == 1) "About & updates" else if (section == "Overview") "Settings" else section) }) },
+            topBar = { CenterAlignedTopAppBar(title = { if (tab == 1) dev.n2k02.updater.N2K02UpdateTitle() else Text(if (section == "Overview") "Settings" else section) }) },
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(selected = tab == 0, onClick = { tab = 0; section = "Overview" },
@@ -183,18 +183,13 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         Button(onClick = { save(); activity.finish() }, modifier = Modifier.weight(1.5f)) { Text("Save changes") }
                     }
                 } else {
-                    ListItem(headlineContent = { Text("BCam") },
-                        supportingContent = { Text("Version " + AppUpdater.installedVersionName(activity)) },
-                        leadingContent = { Icon(Icons.Rounded.Info, null) })
-                    ListItem(headlineContent = { Text("Experimental updates") },
-                        supportingContent = { Text("Offer signed APKs from successful pull request builds. Test builds may have bugs.") },
-                        trailingContent = { Switch(checked = BCamSharedUpdater.experimental,
-                            onCheckedChange = { BCamSharedUpdater.toggle(activity, it) }) },
-                        modifier = Modifier.clickable { BCamSharedUpdater.toggle(activity, !BCamSharedUpdater.experimental) })
-                    HorizontalDivider()
                     dev.n2k02.updater.N2K02UpdateScreen(
-                        controller = BCamSharedUpdater.controller, installGuard = BCamSharedUpdater.guard,
-                        modifier = Modifier.padding(horizontal = 0.dp, vertical = 8.dp))
+                        controller = BCamSharedUpdater.controller,
+                        installGuard = BCamSharedUpdater.guard,
+                        modifier = Modifier.padding(horizontal = 0.dp, vertical = 8.dp),
+                        experimentalEnabled = BCamSharedUpdater.experimental,
+                        onExperimentalEnabledChange = { BCamSharedUpdater.toggle(activity, it) },
+                    )
                 }
             }
         }
