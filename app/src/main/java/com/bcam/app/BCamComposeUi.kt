@@ -4,6 +4,11 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.MediaRecorder
 import android.os.Build
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings as AndroidSettings
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,6 +66,27 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
     val updateStatus by BCamSharedUpdater.controller.status.collectAsState()
     var page by rememberSaveable { mutableStateOf(if (startUpdates) BCamPage.UPDATES else BCamPage.SETTINGS) }
     var settings by remember { mutableStateOf(VideoSettings.load(activity)) }
+    var overlayPermissionGranted by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.M || AndroidSettings.canDrawOverlays(activity))
+    }
+    DisposableEffect(activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                overlayPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                    AndroidSettings.canDrawOverlays(activity)
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
+    fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching {
+                activity.startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + activity.packageName)))
+            }
+        }
+    }
     val prefs = activity.getSharedPreferences(VideoSettings.PREFS, android.content.Context.MODE_PRIVATE)
     var facing by remember { mutableIntStateOf(prefs.getInt(RecordService.KEY_FACING, CameraCharacteristics.LENS_FACING_BACK)) }
     var resetDialog by remember { mutableStateOf(false) }
@@ -202,6 +228,22 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                             supportingContent = { Text(subtitle) },
                             leadingContent = { Icon(icon, null) },
                             modifier = Modifier.clickable { page = destination })
+                    }
+                    ListItem(
+                        headlineContent = { Text("Floating recording controls") },
+                        supportingContent = { Text(if (settings.overlayEnabled && !overlayPermissionGranted)
+                            "Enabled, but Android display-over-other-apps access is required"
+                            else "Enabled by default. Drag to move; Close hides controls without stopping video.") },
+                        leadingContent = { Icon(Icons.Rounded.Layers, null) },
+                        trailingContent = { Switch(checked = settings.overlayEnabled, onCheckedChange = { enabled ->
+                            settings = settings.copy(overlayEnabled = enabled)
+                            settings.save(activity)
+                            if (enabled && !overlayPermissionGranted) requestOverlayPermission()
+                        }) },
+                    )
+                    if (settings.overlayEnabled && !overlayPermissionGranted) {
+                        TextButton(onClick = { requestOverlayPermission() },
+                            modifier = Modifier.padding(start = 64.dp)) { Text("Grant overlay access") }
                     }
                     Text("Opening Settings stops recording and saves the current video.",
                         style = MaterialTheme.typography.bodySmall,

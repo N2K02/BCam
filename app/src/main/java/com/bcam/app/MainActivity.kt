@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
 
 /**
@@ -28,7 +30,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val missing = required.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isEmpty()) startAndClose() else requestPermissions(missing.toTypedArray(), REQ)
+        if (missing.isEmpty()) maybeRequestOverlayAccess() else requestPermissions(missing.toTypedArray(), REQ)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
@@ -37,11 +39,34 @@ class MainActivity : Activity() {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "No microphone permission: recording without sound", Toast.LENGTH_LONG).show()
             }
-            startAndClose()
+            maybeRequestOverlayAccess()
         } else {
             Toast.makeText(this, "BCam needs Camera permission to record", Toast.LENGTH_LONG).show()
             finish()
         }
+    }
+
+    /** Ask once for Android's special overlay permission, then start even if denied. */
+    private fun maybeRequestOverlayAccess() {
+        val prefs = getSharedPreferences(VideoSettings.PREFS, MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            VideoSettings.load(this).overlayEnabled && !Settings.canDrawOverlays(this) &&
+            !prefs.getBoolean("overlay_permission_prompted", false)) {
+            prefs.edit().putBoolean("overlay_permission_prompted", true).apply()
+            val request = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName"))
+            try {
+                startActivityForResult(request, REQ_OVERLAY)
+                return
+            } catch (_: Exception) { /* Device has no matching settings screen. */ }
+        }
+        startAndClose()
+    }
+
+    @Deprecated("Android settings permission page returns through onActivityResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_OVERLAY) startAndClose()
     }
 
     private fun startAndClose() {
@@ -65,5 +90,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ = 1
+        private const val REQ_OVERLAY = 2
     }
 }

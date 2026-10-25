@@ -35,6 +35,7 @@ import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import android.os.BatteryManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.os.storage.StorageManager
 import android.view.OrientationEventListener
 import android.provider.MediaStore
@@ -87,6 +88,8 @@ class RecordService : Service() {
         @Volatile
         var isRunning = false
         @Volatile var isPaused = false
+            private set
+        @Volatile var isRecordingActive = false
             private set
     }
 
@@ -186,6 +189,7 @@ class RecordService : Service() {
                 if (isRunning) return START_NOT_STICKY
                 if (!goForeground()) { stopSelf(); return START_NOT_STICKY }
                 isRunning = true
+                showOverlayIfEnabled()
                 acquireWakeLock()
                 startOrientationListener()
                 h.post {
@@ -215,12 +219,28 @@ class RecordService : Service() {
     }
 
     override fun onDestroy() {
+        dismissOverlay()
         stopOrientationListener()
         if (isRunning) h.post { shutdown(userStopped = false) }
         thread.quitSafely()
         releaseWakeLock()
         isRunning = false
+        isRecordingActive = false
+        isPaused = false
         super.onDestroy()
+    }
+
+    private fun showOverlayIfEnabled() {
+        if (!VideoSettings.load(this).overlayEnabled ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this))) return
+        runCatching {
+            startService(Intent(this, OverlayControlService::class.java)
+                .setAction(OverlayControlService.ACTION_SHOW))
+        }.onFailure { Log.w(TAG, "Floating controls unavailable", it) }
+    }
+
+    private fun dismissOverlay() {
+        stopService(Intent(this, OverlayControlService::class.java))
     }
 
     // ---------------------------------------------------------------- foreground / notification
@@ -443,6 +463,7 @@ class RecordService : Service() {
                         s.setRepeatingRequest(built, null, h)
                         mr.start()
                         recStarted = true
+                        isRecordingActive = true
                         paused = false
         isPaused = false
                         pausedTotalMs = 0L
@@ -587,7 +608,9 @@ class RecordService : Service() {
         nextOut?.finish(keep = false)
         nextOut = null
         recStarted = false
+        isRecordingActive = false
         paused = false
+        isPaused = false
         pausedTotalMs = 0L
         repeating = null
     }
@@ -813,6 +836,9 @@ class RecordService : Service() {
         val saved = savedParts
         main.post {
             isRunning = false
+            isRecordingActive = false
+            isPaused = false
+            dismissOverlay()
             stopOrientationListener()
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
