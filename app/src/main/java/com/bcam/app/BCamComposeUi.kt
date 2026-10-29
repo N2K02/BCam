@@ -250,6 +250,10 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     HorizontalDivider()
+                    val logScreenContext = androidx.compose.ui.platform.LocalContext.current
+                    ListItem(headlineContent = { Text("Logs") },
+                        supportingContent = { Text("Private diagnostic and crash history") },
+                        modifier = Modifier.clickable { logScreenContext.startActivity(android.content.Intent(logScreenContext, com.bcam.app.LogsActivity::class.java)) })
                     ListItem(headlineContent = { Text("About & updates") },
                         supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
                         leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
