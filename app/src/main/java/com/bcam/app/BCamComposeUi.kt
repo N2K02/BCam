@@ -192,7 +192,6 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                 // Logs lives under the same host header, themed Scaffold and system insets.
                 BCamLogsPage(
                     modifier = Modifier.fillMaxSize().padding(insets),
-                    onBack = { page = BCamPage.SETTINGS },
                 )
             } else if (page == BCamPage.UPDATES) {
                 // Standalone updater owns scrolling and receives the Scaffold
