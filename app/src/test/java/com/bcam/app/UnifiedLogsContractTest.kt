@@ -40,4 +40,14 @@ class UnifiedLogsContractTest {
             LogEventOrdering.merge(listOf("untimed A", "untimed B"), emptyList(), "2026-10-29"))
     }
 
+    @Test fun runtimeEmitsPrivacySafeLifecycleEvents() {
+        val path = "app/src/main/java/com/bcam/app/RecordService.kt"
+        val activity = listOf(File(path), File("../$path")).first { it.isFile }.readText()
+        assertTrue(activity.contains("RECORDING_REQUESTED"))
+        assertTrue(activity.contains("RECORDING_STARTED"))
+        assertTrue(activity.contains("CAPTURE_FAILED"))
+        assertTrue(activity.contains("SAFETY_SHUTDOWN"))
+        assertFalse(activity.contains("AppLog.add(\"CAST\", e.message"))
+    }
+
 }
