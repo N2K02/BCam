@@ -2,6 +2,7 @@ package com.bcam.app
 
 import java.io.File
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,4 +30,14 @@ class UnifiedLogsContractTest {
         assertFalse(text.contains("Text(\"Back\")"))
         assertFalse(text.contains("onBack: () -> Unit"))
     }
+    @Test fun savedAndLiveEventsFollowTimeWithoutLosingLegacyDates() {
+        val previous = "2026-10-28 23:59:59.000 [UI] old"
+        val current = "2026-10-29 11:00:02.000 [LOG] new"
+        val call = "[activity] 11:00:01 call"
+        assertEquals(listOf(previous, call, current),
+            LogEventOrdering.merge(listOf(previous, current), listOf(call), "2026-10-29"))
+        assertEquals(listOf("untimed A", "untimed B"),
+            LogEventOrdering.merge(listOf("untimed A", "untimed B"), emptyList(), "2026-10-29"))
+    }
+
 }
