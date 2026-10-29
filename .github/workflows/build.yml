@@ -40,6 +40,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Configure APK build channel
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "BUILD_VARIANT=Debug" >> "$GITHUB_ENV"
+            echo "APK_INPUT=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          else
+            echo "BUILD_VARIANT=Release" >> "$GITHUB_ENV"
+            echo "APK_INPUT=app/build/outputs/apk/release/app-release-unsigned.apk" >> "$GITHUB_ENV"
+          fi
+
       - name: Work out version and release notes
         env:
           REQUESTED: ${{ github.event.inputs.version }}
@@ -96,7 +106,7 @@ jobs:
           yes | "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon assembleRelease -PappVersion="$VERSION" -PappVersionCode="$VERSION_CODE" -PappVersionSuffix="$VERSION_SUFFIX" 2>&1 | tee build.log || {
+          ./gradlew --no-daemon assemble$BUILD_VARIANT -PappVersion="$VERSION" -PappVersionCode="$VERSION_CODE" -PappVersionSuffix="$VERSION_SUFFIX" 2>&1 | tee build.log || {
             # One annotation with the full error text (GitHub caps annotations per step at 10).
             msg=$(grep -E '^e: |error:|What went wrong|Dependency .* requires|compileSdk|Android Gradle plugin' -A3 build.log | head -80 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
             echo "::error title=Build failed::$msg"
@@ -123,7 +133,7 @@ jobs:
             --ks "$K/old.keystore" --ks-pass env:OP --ks-key-alias androiddebugkey --key-pass env:OP \
             --next-signer --ks "$K/release.p12" --ks-pass env:RP --ks-key-alias release --key-pass env:RP \
             --lineage "$K/lineage" --rotation-min-sdk-version 28 \
-            --out "$APP-$VERSION.apk" app/build/outputs/apk/release/app-release-unsigned.apk
+            --out "$APP-$VERSION.apk" $APK_INPUT
           rm -rf "$K"
           "$BT/apksigner" verify --print-certs "$APP-$VERSION.apk" | grep -E "Signer.*(DN|SHA-256 digest)"
 
