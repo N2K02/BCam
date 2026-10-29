@@ -16,7 +16,7 @@ class BCamPageTest {
     }
 
     @Test fun subpagesUseOneTitleAndReturnToSettings() {
-        for (page in listOf(BCamPage.RECORDING, BCamPage.AUDIO_FILES)) {
+        for (page in listOf(BCamPage.RECORDING, BCamPage.AUDIO_FILES, BCamPage.LOGS)) {
             assertTrue(page.isSettingsPage)
             assertFalse(page.showsSettingsIcon)
             assertTrue(page.showsAppBranding)
@@ -24,6 +24,7 @@ class BCamPageTest {
         }
         assertEquals("Recording", BCamPage.RECORDING.title)
         assertEquals("Audio & files", BCamPage.AUDIO_FILES.title)
+        assertEquals("Logs", BCamPage.LOGS.title)
     }
 
     @Test fun updaterHasHostOwnedTitleWithoutExtraBranding() {
@@ -40,6 +41,7 @@ class BCamPageTest {
         assertTrue(BCamPage.HOME.showsAppBranding)
         assertTrue(BCamPage.RECORDING.isSettingsPage)
         assertTrue(BCamPage.AUDIO_FILES.isSettingsPage)
+        assertTrue(BCamPage.LOGS.isSettingsPage)
         assertTrue(BCamPage.UPDATES.isSettingsPage)
     }
 

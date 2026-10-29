@@ -177,6 +177,7 @@ class RecordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.init(applicationContext)
         thread = HandlerThread("bcam-camera").also { it.start() }
         h = Handler(thread.looper)
         facing = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -195,6 +196,7 @@ class RecordService : Service() {
                 if (isRunning) return START_NOT_STICKY
                 if (!goForeground()) { stopSelf(); return START_NOT_STICKY }
                 isRunning = true
+                AppLog.add("CAMERA", "RECORDING_REQUESTED")
                 showOverlayIfEnabled()
                 acquireWakeLock()
                 startOrientationListener()
@@ -485,6 +487,7 @@ class RecordService : Service() {
                         partStartElapsed = SystemClock.elapsedRealtime()
                         partStartWall = System.currentTimeMillis()
                         status = "Recording"
+                        AppLog.add("CAMERA", "RECORDING_STARTED")
                         updateNotification()
                         // Avoid MediaRecorder.pause() racing its first frames.
                         applyPendingPauseWhenReady()
@@ -875,6 +878,7 @@ class RecordService : Service() {
 
     private fun retryLater(msg: String) {
         if (stopped) return
+        AppLog.add("CAMERA", "CAPTURE_RETRY_SCHEDULED")
         status = msg
         updateNotification()
         h.removeCallbacks(retry)
@@ -882,6 +886,7 @@ class RecordService : Service() {
     }
 
     private fun fail(msg: String) {
+        AppLog.add("CAMERA", "CAPTURE_FAILED")
         Log.e(TAG, msg)
         main.post { Toast.makeText(this, "BCam: $msg", Toast.LENGTH_LONG).show() }
         shutdown(userStopped = false)
@@ -889,6 +894,7 @@ class RecordService : Service() {
 
     private fun shutdown(userStopped: Boolean, discardCurrent: Boolean = false) {
         if (stopped) return
+        AppLog.add("CAMERA", if (userStopped) "USER_STOP" else "SAFETY_SHUTDOWN")
         stopped = true
         h.removeCallbacksAndMessages(null)
         pauseWhenReady = false

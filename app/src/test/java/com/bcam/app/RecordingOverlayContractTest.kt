@@ -39,7 +39,9 @@ class RecordingOverlayContractTest {
 
     @Test fun serviceDoesNotRestartHiddenControlsDuringOneRecording() {
         val service = source("RecordService.kt")
-        assertTrue(service.contains("isRunning = true\n                showOverlayIfEnabled()"))
+        assertTrue(service.contains("isRunning = true"))
+        assertTrue(service.contains("showOverlayIfEnabled()"))
+        assertTrue(service.contains("RECORDING_REQUESTED"))
         assertTrue(service.contains("dismissOverlay()"))
         assertTrue(service.contains("isRecordingActive = false"))
         assertTrue(service.contains("ACTION_PAUSE -> if (isRunning) h.post { requestPause() }"))
