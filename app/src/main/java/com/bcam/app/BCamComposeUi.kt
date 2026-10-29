@@ -144,7 +144,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                                     BCamPage.SETTINGS -> Icons.Rounded.Settings
                                     BCamPage.RECORDING -> Icons.Rounded.Videocam
                                     BCamPage.AUDIO_FILES -> Icons.Rounded.AudioFile
-                                    BCamPage.LOGS -> Icons.Rounded.BugReport
+                                    BCamPage.LOGS -> Icons.Rounded.Article
                                     BCamPage.UPDATES -> Icons.Rounded.SystemUpdate
                                 },
                                 contentDescription = null,
@@ -260,7 +260,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                     HorizontalDivider()
                     ListItem(headlineContent = { Text("Logs") },
                         supportingContent = { Text("Private diagnostic and crash history") },
-                        leadingContent = { Icon(Icons.Rounded.BugReport, null) },
+                        leadingContent = { Icon(Icons.Rounded.Article, null) },
                         modifier = Modifier.clickable { page = BCamPage.LOGS })
                     ListItem(headlineContent = { Text("About & updates") },
                         supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
