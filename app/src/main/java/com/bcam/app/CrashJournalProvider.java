@@ -21,6 +21,7 @@ public final class CrashJournalProvider extends ContentProvider {
     @Override public boolean onCreate() {
         if (getContext() == null) return false;
         journal = new File(getContext().getFilesDir(), "crash-journal.log");
+        AppLog.INSTANCE.init(getContext());
         final Thread.UncaughtExceptionHandler prior = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
             record("CRASH", error);
