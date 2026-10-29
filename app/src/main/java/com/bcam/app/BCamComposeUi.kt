@@ -124,6 +124,8 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
     BackHandler(enabled = page != BCamPage.SETTINGS && page != BCamPage.HOME) {
         page = page.backDestination()
     }
+    // Initialize private diagnostics for both SettingsActivity and UpdatesActivity entry paths.
+    LaunchedEffect(activity) { AppLog.init(activity.applicationContext) }
     // Match MRadio: the shared N2K02Theme owns system day/night and Material You colors.
     dev.n2k02.theme.N2K02Theme {
         Scaffold(
@@ -142,6 +144,7 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                                     BCamPage.SETTINGS -> Icons.Rounded.Settings
                                     BCamPage.RECORDING -> Icons.Rounded.Videocam
                                     BCamPage.AUDIO_FILES -> Icons.Rounded.AudioFile
+                                    BCamPage.LOGS -> Icons.Rounded.BugReport
                                     BCamPage.UPDATES -> Icons.Rounded.SystemUpdate
                                 },
                                 contentDescription = null,
@@ -185,7 +188,13 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                 }
             }
         ) { insets ->
-            if (page == BCamPage.UPDATES) {
+            if (page == BCamPage.LOGS) {
+                // Logs lives under the same host header, themed Scaffold and system insets.
+                BCamLogsPage(
+                    modifier = Modifier.fillMaxSize().padding(insets),
+                    onBack = { page = BCamPage.SETTINGS },
+                )
+            } else if (page == BCamPage.UPDATES) {
                 // Standalone updater owns scrolling and receives the Scaffold
                 // bottom-bar inset. Avoid a scrollable Column inside another.
                 dev.n2k02.updater.N2K02UpdatePage(
@@ -250,10 +259,10 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     HorizontalDivider()
-                    val logScreenContext = androidx.compose.ui.platform.LocalContext.current
                     ListItem(headlineContent = { Text("Logs") },
                         supportingContent = { Text("Private diagnostic and crash history") },
-                        modifier = Modifier.clickable { logScreenContext.startActivity(android.content.Intent(logScreenContext, com.bcam.app.LogsActivity::class.java)) })
+                        leadingContent = { Icon(Icons.Rounded.BugReport, null) },
+                        modifier = Modifier.clickable { page = BCamPage.LOGS })
                     ListItem(headlineContent = { Text("About & updates") },
                         supportingContent = { Text(if (updateStatus.hasPendingUpdate()) "A new update is available" else "Version, experimental channel and update checks") },
                         leadingContent = { Icon(Icons.Rounded.SystemUpdate, null) },
