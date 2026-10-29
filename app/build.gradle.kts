@@ -16,7 +16,7 @@ android {
     defaultConfig {
         applicationId = "com.bcam.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // One decimal place: 1.0, 1.1 … 1.9, 2.0. versionCode 1.4 -> 14 (always goes up).
         versionName = appVersion + ((findProperty("appVersionSuffix") as String?) ?: "")
@@ -25,6 +25,7 @@ android {
 
 
     buildTypes {
+        getByName("debug") { applicationIdSuffix = ".experimental"; versionNameSuffix = "-debug" }
         getByName("release") {
             // R8 removes unused code and resources for a smaller, faster APK.
             isMinifyEnabled = true
