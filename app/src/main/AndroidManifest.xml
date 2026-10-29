@@ -24,6 +24,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="BCam">
+        <provider android:name="com.bcam.app.CrashJournalProvider" android:authorities="${applicationId}.crashjournal" android:exported="false" android:initOrder="100" />
 
         <!-- No UI: tapping the icon starts recording and the screen closes immediately. -->
         <activity
