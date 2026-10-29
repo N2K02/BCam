@@ -25,6 +25,19 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+internal object LogEventOrdering {
+    private val stamp = Regex("""(?:^|\s)(?:(\d{4}-\d{2}-\d{2})[ T])?(\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?""")
+    fun merge(saved: List<String>, extra: List<String>, today: String): List<String> =
+        (saved + extra).withIndex().sortedWith(
+            compareBy<IndexedValue<String>> { item ->
+                val match = stamp.find(item.value)
+                if (match == null) "9999-99-99 99:99:99.999"
+                else match.groupValues[1].ifBlank { today } + " " +
+                    match.groupValues[2] + "." + match.groupValues[3].padEnd(3, '0')
+            }.thenBy { it.index }
+        ).map { it.value }
+}
+
 /** Shared AAYouTube-style logging controls. Call only from a host n2k02theme screen. */
 @Composable
 internal fun N2K02UnifiedLogsPage(
@@ -48,9 +61,12 @@ internal fun N2K02UnifiedLogsPage(
     val rows = remember(version, extraLines, extraLabel, cols) {
         val saved = AppLog.slice(0, Int.MAX_VALUE)
         val additional = if (extraLabel != null)
-            listOf("— $extraLabel —") + extraLines.ifEmpty { listOf("No events yet.") }
+            extraLines.ifEmpty { listOf("No events yet.") }.map { "[$extraLabel] $it" }
         else emptyList()
-        (saved + additional).ifEmpty { listOf("No saved diagnostic events.") }
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+        LogEventOrdering.merge(saved, additional, today)
+            .ifEmpty { listOf("No saved diagnostic events.") }
             .flatMap { it.split('\n') }
             .flatMap { line ->
                 if (line.length <= cols) listOf(line) else buildList {
@@ -129,8 +145,13 @@ internal fun N2K02UnifiedLogsPage(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Button(
                     onClick = {
-                        val combined = AppLog.slice(0, Int.MAX_VALUE) +
-                            if (extraLabel != null) listOf("— " + extraLabel + " —") + extraLines else emptyList()
+                        val combined = LogEventOrdering.merge(
+                            AppLog.slice(0, Int.MAX_VALUE),
+                            if (extraLabel != null) extraLines.map { "[$extraLabel] $it" }
+                            else emptyList(),
+                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                .format(java.util.Date()),
+                        )
                         context.getSystemService(ClipboardManager::class.java)
                             ?.setPrimaryClip(ClipData.newPlainText(appName + " logs", combined.joinToString("\n")))
                         Toast.makeText(context, "Logs copied", Toast.LENGTH_SHORT).show()

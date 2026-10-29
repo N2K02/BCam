@@ -21,7 +21,7 @@ object AppLog {
     private val io = Executors.newSingleThreadExecutor { task ->
         Thread(task, "bcam-log-writer").apply { isDaemon = true }
     }
-    private val clock = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+    private val clock = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val date = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     @Volatile private var context: Context? = null
     private val _enabled = MutableStateFlow(false)
@@ -37,7 +37,13 @@ object AppLog {
             prune(home)
             home.listFiles()?.filter { it.name.matches(Regex("log-\\d{4}-\\d{2}-\\d{2}\\.txt")) }
                 ?.sortedBy { it.name }?.forEach { file ->
-                    file.forEachLine { appendMemory(it) }
+                    file.forEachLine { row ->
+                        // Older log files stored only the time; recover their date from the filename.
+                        val oldTime = Regex("""^\d{2}:\d{2}:\d{2}""")
+                        appendMemory(if (oldTime.containsMatchIn(row))
+                            file.name.removePrefix("log-").removeSuffix(".txt") + " " + row
+                        else row)
+                    }
                 }
             listOf("crash-journal.log", "crash-journal-web.log").forEach { name ->
                 File(app.filesDir, name).takeIf { it.exists() }
