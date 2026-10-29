@@ -17,7 +17,7 @@ class LogsThemeContractTest {
         assertTrue(ui.contains("dev.n2k02.theme.N2K02Theme {"))
         assertTrue(ui.contains("page == BCamPage.LOGS"))
         assertTrue(ui.contains("page = BCamPage.LOGS"))
-        assertTrue(ui.contains("BCamPage.LOGS -> Icons.Rounded.BugReport"))
+        assertTrue(ui.contains("BCamPage.LOGS -> Icons.Rounded.Article"))
         assertTrue(ui.contains("BCamLogsPage("))
         assertTrue(ui.contains("LaunchedEffect(activity) { AppLog.init(activity.applicationContext) }"))
         assertFalse(ui.contains("startActivity(android.content.Intent(logScreenContext"))
@@ -37,5 +37,6 @@ class LogsThemeContractTest {
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("AppLog.clear()"))
         assertFalse(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Text(\"Back\")"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("MaterialTheme.colorScheme.surfaceContainer"))
+        assertTrue(ui.contains("leadingContent = { Icon(Icons.Rounded.Article, null) }"))
     }
 }
