@@ -6,6 +6,11 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -25,7 +30,6 @@ import androidx.compose.ui.unit.sp
 internal fun N2K02UnifiedLogsPage(
     modifier: Modifier = Modifier,
     appName: String,
-    onBack: () -> Unit,
     extraLabel: String? = null,
     extraLines: List<String> = emptyList(),
     clearExtra: (() -> Unit)? = null,
@@ -67,20 +71,15 @@ internal fun N2K02UnifiedLogsPage(
         Column(
             modifier = Modifier.fillMaxSize()
                 .then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ListItem(
-                headlineContent = { Text("Enable logging") },
-                supportingContent = { Text("Optional diagnostics · fatal crashes always saved locally") },
-                trailingContent = { Switch(checked = enabled, onCheckedChange = AppLog::setEnabled) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            )
-            if (!enabled) Text(
-                "Detailed logging is off. Saved crash reports and events remain available.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // AAYouTube Logs: compact toggle without a settings-list background.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Enable logging", style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f))
+                Switch(checked = enabled, onCheckedChange = AppLog::setEnabled)
+            }
             Card(
                 modifier = Modifier.fillMaxWidth().then(
                     if (compact) Modifier.height(140.dp) else Modifier.weight(1f)
@@ -101,38 +100,59 @@ internal fun N2K02UnifiedLogsPage(
                     }
                 }
             }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
+            // Same left / centre / right pagination and action spacing as AAYouTube.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Button(
                     onClick = { savedPage = (shown - 1).coerceAtLeast(0); followLatest = false },
                     enabled = shown > 0,
-                ) { Text("Prev") }
-                Text("${shown + 1} / $pages", style = MaterialTheme.typography.labelLarge)
-                TextButton(
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Prev", maxLines = 1, softWrap = false)
+                }
+                Text((shown + 1).toString() + " / " + pages, style = MaterialTheme.typography.labelLarge)
+                Button(
                     onClick = {
                         savedPage = (shown + 1).coerceAtMost(pages - 1)
                         followLatest = savedPage >= pages - 1
                     },
                     enabled = shown < pages - 1,
-                ) { Text("Next") }
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Next", maxLines = 1, softWrap = false)
+                }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    val combined = AppLog.slice(0, Int.MAX_VALUE) +
-                        if (extraLabel != null) listOf("— $extraLabel —") + extraLines else emptyList()
-                    context.getSystemService(ClipboardManager::class.java)
-                        ?.setPrimaryClip(ClipData.newPlainText("$appName logs", combined.joinToString("\n")))
-                    Toast.makeText(context, "Logs copied", Toast.LENGTH_SHORT).show()
-                }, modifier = Modifier.weight(1f)) { Text("Copy") }
-                Button(onClick = {
-                    AppLog.clear()
-                    clearExtra?.invoke()
-                    followLatest = true
-                }, modifier = Modifier.weight(1f)) { Text("Clear all") }
-                TextButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Back") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Button(
+                    onClick = {
+                        val combined = AppLog.slice(0, Int.MAX_VALUE) +
+                            if (extraLabel != null) listOf("— " + extraLabel + " —") + extraLines else emptyList()
+                        context.getSystemService(ClipboardManager::class.java)
+                            ?.setPrimaryClip(ClipData.newPlainText(appName + " logs", combined.joinToString("\n")))
+                        Toast.makeText(context, "Logs copied", Toast.LENGTH_SHORT).show()
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Copy", maxLines = 1, softWrap = false)
+                }
+                Button(
+                    onClick = {
+                        AppLog.clear()
+                        clearExtra?.invoke()
+                        followLatest = true
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.Filled.DeleteSweep, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Clear all", maxLines = 1, softWrap = false)
+                }
             }
         }
     }
