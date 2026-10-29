@@ -29,13 +29,13 @@ class LogsThemeContractTest {
 
     @Test fun logsControlsAndActionsRemainReachableOnSmallScreens() {
         val logs = source("app/src/main/java/com/bcam/app/LogsActivity.kt")
-        assertTrue(logs.contains("maxHeight < 430.dp"))
+        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("maxHeight < 430.dp"))
         assertTrue(logs.contains("Modifier.verticalScroll(rememberScrollState())"))
         assertTrue(logs.contains("Modifier.weight(1f)"))
-        assertTrue(logs.contains("trailingContent = {"))
-        assertTrue(logs.contains("Switch(checked = enabled"))
-        assertTrue(logs.contains("onClick = AppLog::clear"))
+        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("trailingContent = {"))
+        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Switch(checked = enabled"))
+        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("AppLog.clear()"))
         assertTrue(logs.contains("onClick = onBack"))
-        assertTrue(logs.contains("MaterialTheme.colorScheme.surfaceContainer"))
+        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("MaterialTheme.colorScheme.surfaceContainer"))
     }
 }
