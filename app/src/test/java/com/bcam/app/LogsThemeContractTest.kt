@@ -37,6 +37,6 @@ class LogsThemeContractTest {
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("AppLog.clear()"))
         assertFalse(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Text(\"Back\")"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("MaterialTheme.colorScheme.surfaceContainer"))
-        assertTrue(ui.contains("leadingContent = { Icon(Icons.Rounded.Article, null) }"))
+        assertTrue(source("app/src/main/java/com/bcam/app/BCamComposeUi.kt").contains("leadingContent = { Icon(Icons.Rounded.Article, null) }"))
     }
 }
