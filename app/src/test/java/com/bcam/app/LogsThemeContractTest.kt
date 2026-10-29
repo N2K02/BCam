@@ -32,10 +32,10 @@ class LogsThemeContractTest {
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("maxHeight < 430.dp"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Modifier.verticalScroll(rememberScrollState())"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Modifier.weight(1f)"))
-        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("trailingContent = {"))
+        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Icons.Filled.ContentCopy"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Switch(checked = enabled"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("AppLog.clear()"))
-        assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("onClick = onBack"))
+        assertFalse(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("Text(\"Back\")"))
         assertTrue(source("app/src/main/java/com/bcam/app/UnifiedLogsPage.kt").contains("MaterialTheme.colorScheme.surfaceContainer"))
     }
 }
