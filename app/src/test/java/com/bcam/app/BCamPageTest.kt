@@ -24,7 +24,6 @@ class BCamPageTest {
         }
         assertEquals("Recording", BCamPage.RECORDING.title)
         assertEquals("Audio & files", BCamPage.AUDIO_FILES.title)
-        assertEquals("Logs".title)
     }
 
     @Test fun updaterHasHostOwnedTitleWithoutExtraBranding() {
