@@ -6,7 +6,6 @@ internal enum class BCamPage(val title: String) {
     SETTINGS("Settings"),
     RECORDING("Recording"),
     AUDIO_FILES("Audio & files"),
-    LOGS("Logs"),
     UPDATES("About & updates");
 
     val isSettingsPage: Boolean get() = this != HOME
