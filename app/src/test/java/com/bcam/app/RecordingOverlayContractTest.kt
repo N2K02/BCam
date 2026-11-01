@@ -14,6 +14,17 @@ class RecordingOverlayContractTest {
         return files.first { it.exists() }.readText()
     }
 
+    @Test fun overlayUpdatesOnStateChangesInsteadOfFrequentPolling() {
+        val overlay = source("OverlayControlService.kt")
+        val service = source("RecordService.kt")
+        assertTrue(overlay.contains("ACTION_STATUS_CHANGED"))
+        assertTrue(overlay.contains("ContextCompat.RECEIVER_NOT_EXPORTED"))
+        assertTrue(overlay.contains("handler.postDelayed(this, 15_000L)"))
+        assertFalse(overlay.contains("handler.postDelayed(this, 300L)"))
+        assertTrue(service.contains("sendBroadcast(Intent(OverlayControlService.ACTION_STATUS_CHANGED)"))
+        assertTrue(overlay.contains("unregisterReceiver(statusReceiver)"))
+    }
+
     @Test fun overlayIsEnabledForNewInstalls() {
         assertTrue(VideoSettings().overlayEnabled)
     }
