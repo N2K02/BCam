@@ -349,7 +349,11 @@ class RecordService : Service() {
     }
 
     private fun updateNotification() {
-        if (isRunning && !stopped) nm.notify(NOTIF_ID, buildNotification())
+        if (isRunning && !stopped) {
+            nm.notify(NOTIF_ID, buildNotification())
+            // Refresh the existing overlay only on a recording-state change.
+            sendBroadcast(Intent(OverlayControlService.ACTION_STATUS_CHANGED).setPackage(packageName))
+        }
     }
 
     @SuppressLint("WakelockTimeout")

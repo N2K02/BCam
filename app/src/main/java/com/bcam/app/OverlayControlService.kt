@@ -3,7 +3,10 @@ package com.bcam.app
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
@@ -31,6 +34,7 @@ class OverlayControlService : Service() {
     companion object {
         const val ACTION_SHOW = "com.bcam.app.overlay.SHOW"
         const val ACTION_DISMISS = "com.bcam.app.overlay.DISMISS"
+        const val ACTION_STATUS_CHANGED = "com.bcam.app.overlay.STATUS_CHANGED"
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -42,6 +46,25 @@ class OverlayControlService : Service() {
     private var stopButton: ImageButton? = null
     private var blink: ObjectAnimator? = null
     private var stopping = false
+
+    // Notification state transitions wake the overlay immediately; the slow watchdog
+    // covers missed broadcasts without waking the phone every 300 ms.
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_STATUS_CHANGED) {
+                handler.removeCallbacks(refresh)
+                handler.post(refresh)
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        ContextCompat.registerReceiver(
+            this, statusReceiver, IntentFilter(ACTION_STATUS_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
 
     private val refresh = object : Runnable {
         override fun run() {
@@ -57,7 +80,7 @@ class OverlayControlService : Service() {
                 RecordService.isPaused -> renderPaused()
                 else -> renderRecording()
             }
-            handler.postDelayed(this, 300L)
+            handler.postDelayed(this, 15_000L)
         }
     }
 
@@ -327,6 +350,7 @@ class OverlayControlService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(statusReceiver) }
         removeOverlay()
         super.onDestroy()
     }
