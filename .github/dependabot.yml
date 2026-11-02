@@ -1,0 +1,23 @@
+version: 2
+
+# One weekly PR for scheduled Gradle and GitHub Actions version updates.
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "09:00"
+      timezone: Indian/Mauritius
+    labels:
+      - dependencies
+
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    multi-ecosystem-group: all-dependencies
+    patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    multi-ecosystem-group: all-dependencies
+    patterns: ["*"]
