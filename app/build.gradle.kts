@@ -47,10 +47,10 @@ android {
 dependencies {
     implementation("dev.n2k02:theme:0.1.4")
     implementation("dev.n2k02:updater:0.1.19")
-    implementation("androidx.compose.material3:material3:1.5.0-beta01")
+    implementation("androidx.compose.material3:material3:1.5.0-beta02")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
