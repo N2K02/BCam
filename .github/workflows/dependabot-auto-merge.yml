@@ -1,0 +1,73 @@
+name: Dependabot green-only auto-merge
+
+# The privileged workflow runs from main; never check out or execute PR code here.
+on:
+  workflow_run:
+    workflows: ["*"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.name != 'Dependabot green-only auto-merge'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: dependabot-auto-merge-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      - name: Verify every check then squash-merge dependency PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only Dependabot's branches, plus the existing consolidated-dependency PR.
+          prs="$(gh api "repos/$REPO/pulls?state=open&per_page=100")"
+          pr_numbers="$(jq -r --arg branch "$HEAD_BRANCH" '
+            .[] | select(.base.ref == "main" and .head.ref == $branch and .draft == false)
+            | select((.user.login == "dependabot[bot]" and (.head.ref | startswith("dependabot/")))
+                  or (.user.login == "N2K02" and .head.ref == "chore/grouped-dependabot-updates"))
+            | .number' <<<"$prs")"
+          if [[ -z "$pr_numbers" ]]; then
+            echo "No eligible dependency PR for $HEAD_BRANCH"
+            exit 0
+          fi
+          while IFS= read -r number; do
+            pr="$(gh api "repos/$REPO/pulls/$number")"
+            head="$(jq -r '.head.sha' <<<"$pr")"
+            if [[ "$(jq -r '.mergeable' <<<"$pr")" != true ]]; then
+              echo "PR #$number not mergeable yet; leaving open"
+              continue
+            fi
+            # gh pr checks resolves the checks on GitHub's tested PR merge ref.
+            if ! checks="$(gh pr checks "$number" -R "$REPO" --json name,bucket,state 2>&1)"; then
+              echo "PR #$number has failed/pending checks: $checks"
+              continue
+            fi
+            if ! jq -e '
+              length > 0
+              and all(.[]; .bucket == "pass")
+              and any(.[]; .bucket == "pass" and (.name | ascii_downcase | test("build|test|ci|validate|guard|compile|lint")))
+            ' <<<"$checks" >/dev/null; then
+              echo "PR #$number does not have all-green CI/build checks; leaving open"
+              continue
+            fi
+            # Guard against a PR update between checking CI and merging.
+            fresh="$(gh api "repos/$REPO/pulls/$number")"
+            if [[ "$(jq -r '.head.sha' <<<"$fresh")" != "$head" ]]; then
+              echo "PR #$number changed during verification; leaving open"
+              continue
+            fi
+            echo "All checks green on PR #$number at $head; squash-merging"
+            gh api --method PUT "repos/$REPO/pulls/$number/merge" \
+              -f merge_method=squash -f sha="$head"
+          done <<<"$pr_numbers"
