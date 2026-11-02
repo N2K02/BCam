@@ -66,6 +66,14 @@ if [[ -n "$CURRENT_JSON" ]]; then
 fi
 
 for attempt in 1 2 3 4 5; do
+  CURRENT_JSON=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.content' 2>/dev/null | tr -d '\\n' | base64 -d 2>/dev/null || true)
+  if [[ -n "$CURRENT_JSON" ]]; then
+    BRANCH_CODE=$(jq -r '.versionCode // 0' <<<"$CURRENT_JSON")
+    if [[ "$BRANCH_CODE" =~ ^[0-9]+$ ]] && (( BRANCH_CODE >= VERSION_CODE )); then
+      echo "Equal or newer feed manifest is already on $FEED_BRANCH; keeping it."
+      exit 0
+    fi
+  fi
   CURRENT_SHA=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.sha' 2>/dev/null || true)
   ARGS=(--method PUT "repos/$FEED_REPO/contents/$FEED_PATH" \
     -f "message=Prepare $APP_LABEL $VERSION ($CHANNEL) update feed" \
