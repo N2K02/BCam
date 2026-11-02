@@ -1,0 +1,37 @@
+version: 2
+
+registries:
+  n2k02-theme:
+    type: maven-repository
+    url: https://maven.pkg.github.com/N2K02/n2k02theme
+    username: N2K02
+    password: ${{secrets.N2K02_PACKAGES_TOKEN}}
+  n2k02-updater:
+    type: maven-repository
+    url: https://maven.pkg.github.com/N2K02/n2k02updater
+    username: N2K02
+    password: ${{secrets.N2K02_PACKAGES_TOKEN}}
+
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "09:00"
+      timezone: Indian/Mauritius
+    labels:
+      - dependencies
+
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    registries:
+      - n2k02-theme
+      - n2k02-updater
+    multi-ecosystem-group: all-dependencies
+    patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    multi-ecosystem-group: all-dependencies
+    patterns: ["*"]
