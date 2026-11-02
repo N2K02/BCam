@@ -50,48 +50,54 @@ if ! gh api "repos/$FEED_REPO/git/ref/heads/$FEED_BRANCH" >/dev/null 2>&1; then
   MAIN_SHA=$(gh api "repos/$FEED_REPO/git/ref/heads/main" --jq '.object.sha')
   gh api --method POST "repos/$FEED_REPO/git/refs" \
     -f "ref=refs/heads/$FEED_BRANCH" -f "sha=$MAIN_SHA" >/dev/null || {
-      # A concurrent publisher may have created the predictable branch first.
       gh api "repos/$FEED_REPO/git/ref/heads/$FEED_BRANCH" >/dev/null
     }
 fi
 
-# A newer run may already have updated the open feed branch.
+SKIP_MANIFEST_UPDATE=false
 CURRENT_JSON=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.content' 2>/dev/null | tr -d '\n' | base64 -d 2>/dev/null || true)
 if [[ -n "$CURRENT_JSON" ]]; then
   BRANCH_CODE=$(jq -r '.versionCode // 0' <<<"$CURRENT_JSON")
   if [[ "$BRANCH_CODE" =~ ^[0-9]+$ ]] && (( BRANCH_CODE >= VERSION_CODE )); then
     echo "Equal or newer feed manifest is already on $FEED_BRANCH; keeping it."
-    exit 0
+    SKIP_MANIFEST_UPDATE=true
   fi
 fi
 
-for attempt in 1 2 3 4 5; do
-  CURRENT_JSON=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.content' 2>/dev/null | tr -d '\\n' | base64 -d 2>/dev/null || true)
-  if [[ -n "$CURRENT_JSON" ]]; then
-    BRANCH_CODE=$(jq -r '.versionCode // 0' <<<"$CURRENT_JSON")
-    if [[ "$BRANCH_CODE" =~ ^[0-9]+$ ]] && (( BRANCH_CODE >= VERSION_CODE )); then
-      echo "Equal or newer feed manifest is already on $FEED_BRANCH; keeping it."
-      exit 0
+if [[ "$SKIP_MANIFEST_UPDATE" != true ]]; then
+  for attempt in 1 2 3 4 5; do
+    CURRENT_JSON=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.content' 2>/dev/null | tr -d '\n' | base64 -d 2>/dev/null || true)
+    if [[ -n "$CURRENT_JSON" ]]; then
+      BRANCH_CODE=$(jq -r '.versionCode // 0' <<<"$CURRENT_JSON")
+      if [[ "$BRANCH_CODE" =~ ^[0-9]+$ ]] && (( BRANCH_CODE >= VERSION_CODE )); then
+        echo "A newer feed manifest won the publication race; keeping it."
+        SKIP_MANIFEST_UPDATE=true
+        break
+      fi
     fi
-  fi
-  CURRENT_SHA=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.sha' 2>/dev/null || true)
-  ARGS=(--method PUT "repos/$FEED_REPO/contents/$FEED_PATH" \
-    -f "message=Prepare $APP_LABEL $VERSION ($CHANNEL) update feed" \
-    -f "content=$(base64 -w0 manifest.json)" -f "branch=$FEED_BRANCH")
-  [[ -z "$CURRENT_SHA" ]] || ARGS+=(-f "sha=$CURRENT_SHA")
-  if gh api "${ARGS[@]}" >/dev/null; then
-    break
-  fi
-  [[ "$attempt" -lt 5 ]] || { echo "::error::Unable to update feed branch after retries" >&2; exit 1; }
-  sleep "$((attempt * 2))"
-done
+    CURRENT_SHA=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.sha' 2>/dev/null || true)
+    ARGS=(--method PUT "repos/$FEED_REPO/contents/$FEED_PATH" \
+      -f "message=Prepare $APP_LABEL $VERSION ($CHANNEL) update feed" \
+      -f "content=$(base64 -w0 manifest.json)" -f "branch=$FEED_BRANCH")
+    [[ -z "$CURRENT_SHA" ]] || ARGS+=(-f "sha=$CURRENT_SHA")
+    if gh api "${ARGS[@]}" >/dev/null; then
+      break
+    fi
+    [[ "$attempt" -lt 5 ]] || { echo "::error::Unable to update feed branch after retries" >&2; exit 1; }
+    sleep "$((attempt * 2))"
+  done
+fi
 
 EXISTING_PR=$(gh pr list --repo "$FEED_REPO" --state open --head "N2K02:$FEED_BRANCH" --json number --jq '.[0].number // empty')
 if [[ -z "$EXISTING_PR" ]]; then
-  gh pr create --repo "$FEED_REPO" --base main --head "$FEED_BRANCH" \
+  if gh pr create --repo "$FEED_REPO" --base main --head "$FEED_BRANCH" \
     --title "Publish $APP_LABEL $VERSION ($CHANNEL) update feed" \
-    --body "Updates `$FEED_PATH` to reference the signed APK already published for $APP_LABEL $VERSION ($CHANNEL). The app will discover this release after the feed change is merged."
-  echo "Created feed pull request for $APP_LABEL $CHANNEL."
+    --body "Updates $FEED_PATH to reference the signed APK already published for $APP_LABEL $VERSION ($CHANNEL). The app will discover this release after the feed change is merged."; then
+    echo "Created feed pull request for $APP_LABEL $CHANNEL."
+  else
+    echo "::error::Could not open the feed PR. The distribution token needs Contents: write and Pull requests: write access to $FEED_REPO." >&2
+    exit 1
+  fi
 else
   echo "Updated feed pull request #$EXISTING_PR for $APP_LABEL $CHANNEL."
 fi
