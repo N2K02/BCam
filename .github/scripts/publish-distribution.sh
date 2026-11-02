@@ -38,16 +38,52 @@ if [ -n "$CURRENT_JSON" ]; then
   fi
 fi
 ENC=$(base64 -w0 manifest.json)
+FEED_REPO="${PUBLIC_REPO:-${TARGET:-}}"
+FEED_PATH="${PATH_IN_REPO:-${MANIFEST:-}}"
+FEED_SLUG="${FEED_PATH%%/*}"
+FEED_BRANCH="publish-feed-${FEED_SLUG}-${CHANNEL}"
+APP_LABEL="${APP:-${APK_NAME:-$FEED_SLUG}}"
+[[ -n "$FEED_REPO" && -n "$FEED_PATH" ]] || { echo "::error::Missing public feed target" >&2; exit 1; }
+
+# Keep one reviewable feed PR per app and channel. Never write the protected main branch.
+if ! gh api "repos/$FEED_REPO/git/ref/heads/$FEED_BRANCH" >/dev/null 2>&1; then
+  MAIN_SHA=$(gh api "repos/$FEED_REPO/git/ref/heads/main" --jq '.object.sha')
+  gh api --method POST "repos/$FEED_REPO/git/refs" \
+    -f "ref=refs/heads/$FEED_BRANCH" -f "sha=$MAIN_SHA" >/dev/null || {
+      # A concurrent publisher may have created the predictable branch first.
+      gh api "repos/$FEED_REPO/git/ref/heads/$FEED_BRANCH" >/dev/null
+    }
+fi
+
+# A newer run may already have updated the open feed branch.
+CURRENT_JSON=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.content' 2>/dev/null | tr -d '\n' | base64 -d 2>/dev/null || true)
+if [[ -n "$CURRENT_JSON" ]]; then
+  BRANCH_CODE=$(jq -r '.versionCode // 0' <<<"$CURRENT_JSON")
+  if [[ "$BRANCH_CODE" =~ ^[0-9]+$ ]] && (( BRANCH_CODE >= VERSION_CODE )); then
+    echo "Equal or newer feed manifest is already on $FEED_BRANCH; keeping it."
+    exit 0
+  fi
+fi
+
 for attempt in 1 2 3 4 5; do
-  CURRENT_SHA=$(gh api "repos/$TARGET/contents/$MANIFEST" --jq .sha 2>/dev/null || true)
-  ARGS=(--method PUT "repos/$TARGET/contents/$MANIFEST" -f "message=Publish $APP $VERSION ($CHANNEL)" -f "content=$ENC" -f "branch=main")
-  [ -z "$CURRENT_SHA" ] || ARGS+=(-f "sha=$CURRENT_SHA")
+  CURRENT_SHA=$(gh api "repos/$FEED_REPO/contents/$FEED_PATH?ref=$FEED_BRANCH" --jq '.sha' 2>/dev/null || true)
+  ARGS=(--method PUT "repos/$FEED_REPO/contents/$FEED_PATH" \
+    -f "message=Prepare $APP_LABEL $VERSION ($CHANNEL) update feed" \
+    -f "content=$(base64 -w0 manifest.json)" -f "branch=$FEED_BRANCH")
+  [[ -z "$CURRENT_SHA" ]] || ARGS+=(-f "sha=$CURRENT_SHA")
   if gh api "${ARGS[@]}" >/dev/null; then
     break
   fi
-  if [ "$attempt" -eq 5 ]; then
-    echo "Failed to publish manifest after five attempts" >&2
-    exit 1
-  fi
+  [[ "$attempt" -lt 5 ]] || { echo "::error::Unable to update feed branch after retries" >&2; exit 1; }
   sleep "$((attempt * 2))"
 done
+
+EXISTING_PR=$(gh pr list --repo "$FEED_REPO" --state open --head "N2K02:$FEED_BRANCH" --json number --jq '.[0].number // empty')
+if [[ -z "$EXISTING_PR" ]]; then
+  gh pr create --repo "$FEED_REPO" --base main --head "$FEED_BRANCH" \
+    --title "Publish $APP_LABEL $VERSION ($CHANNEL) update feed" \
+    --body "Updates `$FEED_PATH` to reference the signed APK already published for $APP_LABEL $VERSION ($CHANNEL). The app will discover this release after the feed change is merged."
+  echo "Created feed pull request for $APP_LABEL $CHANNEL."
+else
+  echo "Updated feed pull request #$EXISTING_PR for $APP_LABEL $CHANNEL."
+fi
