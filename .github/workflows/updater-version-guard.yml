@@ -10,7 +10,7 @@ jobs:
     name: Require n2k02updater 0.1.19+
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify pinned updater and Gradle build gate
         shell: bash
         run: |
