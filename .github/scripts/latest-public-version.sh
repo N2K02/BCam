@@ -10,8 +10,8 @@ if [[ ! "$slug" =~ ^[a-z0-9]+$ ]]; then
   exit 1
 fi
 
-repo="N2K02/n2k02.github.io"
-refs=$(gh api --paginate "repos/$repo/git/matching-refs/tags/$slug-v" --jq '.[].ref') || {
+repo="${GITHUB_REPOSITORY:-N2K02/BCam}"
+refs=$(gh api --paginate "repos/$repo/git/matching-refs/tags/v" --jq '.[].ref') || {
   echo "::error::Unable to verify public $slug release tags; refusing to guess a version." >&2
   exit 1
 }
@@ -19,5 +19,5 @@ refs=$(gh api --paginate "repos/$repo/git/matching-refs/tags/$slug-v" --jq '.[].
 # Both version-only tags and historical -build-N tags identify the same stable
 # version. Restrict matches to one-decimal release numbers (e.g. v4.9, v5.0).
 printf '%s\n' "$refs" |
-  sed -nE "s|^refs/tags/$slug-v([0-9]+[.][0-9])(-build-[0-9]+)?$|v\\1|p" |
+  sed -nE "s|^refs/tags/v([0-9]+[.][0-9])(-build-[0-9]+)?$|v\\1|p" |
   sort -V | tail -1
