@@ -84,7 +84,8 @@ jobs:
             fi
           fi
           echo "VERSION=$ver" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( 100000 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          VERSION_CODE=$(python3 .github/scripts/version_code.py "$GITHUB_REPOSITORY" "$GITHUB_RUN_NUMBER")
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             echo "VERSION_SUFFIX=-experimental.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           else
@@ -101,7 +102,7 @@ jobs:
           [ -n "$changes" ] || changes="- Rebuild, no code changes"
           {
             echo "## $APP $ver"
-            echo "Version code: $((100000 + GITHUB_RUN_NUMBER))"
+            echo "Version code: $VERSION_CODE"
             echo
             echo "### What's new"
             echo "$changes"
