@@ -113,57 +113,48 @@ object AppUpdater {
     // ---------------------------------------------------------------- GitHub (blocking: call off the main thread)
 
     fun latestRelease(context: Context): Release? {
-        val stable = runCatching { publicStableRelease() }.getOrNull() ?: legacyLatestRelease()
+        val stable = legacyLatestRelease()
         val experimental = if (experimentalEnabled(context)) runCatching { experimentalRelease() }.getOrNull() else null
         return listOfNotNull(stable, experimental).maxByOrNull { it.versionCode }
     }
 
     private fun experimentalRelease(): Release? {
-        val c = URL("https://n2k02.github.io/bcam/updates/experimental.json").openConnection() as HttpURLConnection
+        val connection = URL("https://api.github.com/repos/$REPO/releases?per_page=100")
+            .openConnection() as HttpURLConnection
         try {
-            c.connectTimeout = 10_000
-            c.readTimeout = 15_000
-            if (c.responseCode == 404) return null
-            if (c.responseCode != 200) throw IOException("Experimental HTTP ${c.responseCode}")
-            val o = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
-            val url = o.optString("apkUrl")
-            val sha = o.optString("sha256").lowercase()
-            if (o.optString("channel") != "experimental" || o.optLong("versionCode") <= 0 ||
-                !url.startsWith("https://github.com/") || !Regex("[a-f0-9]{64}").matches(sha)) return null
-            val arr = o.optJSONArray("notes")
-            return Release(o.optString("tag"), o.optString("versionName"), o.optLong("versionCode"),
-                if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it) },
-                url, o.optString("apkName"), o.optLong("apkSize"), sha, o.optString("pageUrl"))
-        } finally { c.disconnect() }
-    }
-
-    private fun publicStableRelease(): Release? {
-        val c = URL("https://n2k02.github.io/bcam/updates/stable.json").openConnection() as HttpURLConnection
-        try {
-            c.connectTimeout = 10_000
-            c.readTimeout = 15_000
-            if (c.responseCode == 404) return null
-            if (c.responseCode != 200) throw IOException("Manifest HTTP ${c.responseCode}")
-            val o = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
-            val digest = o.optString("sha256").lowercase()
-            val apkUrl = o.optString("apkUrl")
-            if (o.optLong("versionCode") <= 0 || !apkUrl.startsWith("https://") || !Regex("[a-f0-9]{64}").matches(digest)) return null
-            val arr = o.optJSONArray("notes")
-            val notes = if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it) }
-            return Release(
-                tag = o.optString("tag"),
-                versionName = o.optString("versionName"),
-                versionCode = o.optLong("versionCode"),
-                notes = notes,
-                apkUrl = apkUrl,
-                apkName = o.optString("apkName"),
-                apkSize = o.optLong("apkSize"),
-                sha256 = digest,
-                pageUrl = o.optString("pageUrl"),
-            )
-        } finally {
-            c.disconnect()
-        }
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 15_000
+            connection.setRequestProperty("Accept", "application/vnd.github+json")
+            connection.setRequestProperty("User-Agent", "$APP_NAME-updater (Android)")
+            if (connection.responseCode == 404) return null
+            if (connection.responseCode != 200) throw IOException("Releases HTTP ${connection.responseCode}")
+            val releases = org.json.JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+            return (0 until releases.length()).mapNotNull { index ->
+                val release = releases.optJSONObject(index) ?: return@mapNotNull null
+                if (release.optBoolean("draft") || !release.optBoolean("prerelease")) return@mapNotNull null
+                val tag = release.optString("tag_name")
+                val run = Regex("""^experimental-pr-\d+-run-(\d+)$""")
+                    .matchEntire(tag)?.groupValues?.get(1)?.toLongOrNull()
+                    ?: return@mapNotNull null
+                val assets = release.optJSONArray("assets") ?: return@mapNotNull null
+                val apk = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }
+                    .firstOrNull { it.optString("name").endsWith(".apk", true) &&
+                        it.optString("browser_download_url").startsWith("https://github.com/") }
+                    ?: return@mapNotNull null
+                Release(
+                    tag = tag,
+                    versionName = tag,
+                    versionCode = 100_000L + run,
+                    notes = whatsNew(release.optString("body")),
+                    apkUrl = apk.optString("browser_download_url"),
+                    apkName = apk.optString("name"),
+                    apkSize = apk.optLong("size"),
+                    sha256 = apk.optString("digest").takeIf { it.startsWith("sha256:") }
+                        ?.removePrefix("sha256:")?.lowercase(),
+                    pageUrl = release.optString("html_url"),
+                )
+            }.maxByOrNull { it.versionCode }
+        } finally { connection.disconnect() }
     }
 
     private fun legacyLatestRelease(): Release? {
