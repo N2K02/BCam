@@ -3,7 +3,7 @@ on:
   pull_request_target:
     types: [closed]
 permissions:
-  contents: write
+  contents: read
 jobs:
   delete-merged-branch:
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository
@@ -28,8 +28,8 @@ jobs:
               return;
             }
             try {
-              await github.rest.git.deleteRef({owner, repo, ref: 'heads/' + branch});
-              core.info('Deleted merged PR branch: ' + branch);
+              core.info('Preserving merged branch: ' + branch);
+              core.info('Automatic branch deletion disabled.');
             } catch (error) {
               if (error.status === 404 || error.status === 422) {
                 core.info('Branch already deleted or protected: ' + branch);
