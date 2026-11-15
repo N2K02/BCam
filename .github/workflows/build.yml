@@ -167,7 +167,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP }}-${{ env.VERSION }}
-          path: ${{ env.APP }}-${{ env.VERSION }}.apk
+          path: ${{ env.APK_NAME || format('{0}-{1}', env.APP, env.VERSION) }}.apk
 
       - name: Publish APK as a release (easy phone download)
         if: github.event_name != 'pull_request'
