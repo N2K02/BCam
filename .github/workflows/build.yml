@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [closed]
   workflow_dispatch:
     inputs:
       version:
@@ -18,21 +20,23 @@ permissions:
 
 # Builds run one at a time, so two quick pushes never get the same version number.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.number) || 'main' }}
   cancel-in-progress: true
 
 env:
   APP: BCam
+  BUILD_COMMIT: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.sha }}
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'pull_request_target' || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository && !contains(github.event.pull_request.title, '[skip ci]')))
     runs-on: ubuntu-latest
     env:
       N2K02_PACKAGES_TOKEN: ${{ secrets.N2K02_PACKAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.sha }}
           fetch-depth: 0   # full history + tags, for the version number and release notes
 
       - uses: actions/setup-java@v6
@@ -80,7 +84,8 @@ jobs:
             fi
           fi
           echo "VERSION=$ver" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( 100000 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          VERSION_CODE=$(python3 .github/scripts/version_code.py "$GITHUB_REPOSITORY" "$GITHUB_RUN_NUMBER")
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             echo "VERSION_SUFFIX=-experimental.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           else
@@ -97,7 +102,7 @@ jobs:
           [ -n "$changes" ] || changes="- Rebuild, no code changes"
           {
             echo "## $APP $ver"
-            echo "Version code: $((100000 + GITHUB_RUN_NUMBER))"
+            echo "Version code: $VERSION_CODE"
             echo
             echo "### What's new"
             echo "$changes"
@@ -105,7 +110,7 @@ jobs:
             echo "### Install"
             echo "Download the APK below and install it on your phone."
             echo
-            echo "_Built from \`${GITHUB_SHA::7}\`${prev:+ · changes since \`$prev\`}_"
+            echo "_Built from \`${BUILD_COMMIT::7}\`${prev:+ · changes since \`$prev\`}_"
           } > release-notes.md
           cat release-notes.md
 
@@ -159,7 +164,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.VERSION }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ env.BUILD_COMMIT }}
           name: ${{ env.APP }} ${{ env.VERSION }}
           body_path: release-notes.md
           files: ${{ env.APP }}-${{ env.VERSION }}.apk
