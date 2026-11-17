@@ -45,7 +45,7 @@ android {
 
  // Experimental only: private libraries are absent from production builds.
 dependencies {
-    implementation("dev.n2k02:theme:0.1.14")
+    implementation("dev.n2k02:theme:0.1.15")
     implementation("dev.n2k02:updater:0.1.36")
     implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.activity:activity-compose:1.11.0")
