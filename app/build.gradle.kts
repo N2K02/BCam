@@ -11,7 +11,7 @@ val appVersionCode = appVersion.split(".").let { (major, minor) -> major.toInt()
 
 android {
     namespace = "com.bcam.app"
-    compileSdk = 37
+    compileSdk { version = release(37) { minorApiLevel = 2 } }
 
     defaultConfig {
         applicationId = "com.bcam.app"
@@ -46,8 +46,8 @@ android {
  // Experimental only: private libraries are absent from production builds.
 dependencies {
     implementation("dev.n2k02:theme:0.1.15")
-    implementation("dev.n2k02:updater:0.1.36")
-    implementation("androidx.compose.material3:material3:1.5.0-rc01")
+    implementation("dev.n2k02:updater:0.1.39")
+    implementation("androidx.compose.material3:material3:1.6.0-alpha01")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
