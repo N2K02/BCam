@@ -25,3 +25,4 @@ jobs:
         with:
           name: BCam-shared-libraries-experimental
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
