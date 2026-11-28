@@ -162,12 +162,29 @@ class RecordService : Service() {
     private var pausedTotalMs = 0L     // pauses in the current part, so the timer shows recorded time
     private var repeating: CaptureRequest? = null
 
+    // Owned by the camera worker; never reset when the file or camera changes.
+    private var sessionLimit: RecordingSessionLimit? = null
+    private val autoStop = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            val remaining = sessionLimit?.remainingMs(SystemClock.elapsedRealtime()) ?: return
+            if (remaining == 0L) shutdown(userStopped = false, autoStopped = true)
+            else h.postDelayed(this, remaining)
+        }
+    }
+
+    private fun stopIfSessionExpired(): Boolean {
+        if (sessionLimit?.remainingMs(SystemClock.elapsedRealtime()) != 0L) return false
+        shutdown(userStopped = false, autoStopped = true)
+        return true
+    }
+
     private val retry = Runnable { if (!stopped && recorder == null) startPart() }
 
     /** Every 30 s while recording: stop cleanly before storage or battery runs out. */
     private val safetyCheck = object : Runnable {
         override fun run() {
-            if (stopped) return
+            if (stopped || stopIfSessionExpired()) return
             lowResourceReason()?.let { reason -> stopForSafety(reason); return }
             h.postDelayed(this, SAFETY_CHECK_MS)
         }
@@ -195,6 +212,7 @@ class RecordService : Service() {
             ACTION_START -> {
                 if (isRunning) return START_NOT_STICKY
                 if (!goForeground()) { stopSelf(); return START_NOT_STICKY }
+                val limit = RecordingSessionLimit(SystemClock.elapsedRealtime(), settings.autoStopMinutes)
                 isRunning = true
                 AppLog.add("CAMERA", "RECORDING_REQUESTED")
                 showOverlayIfEnabled()
@@ -202,6 +220,9 @@ class RecordService : Service() {
                 startOrientationListener()
                 h.post {
                     stopped = false
+                    sessionLimit = limit
+                    autoStop.run()
+                    if (stopped) return@post
                     val reason = lowResourceReason()
                     if (reason != null) { stopForSafety(reason); return@post }
                     startPart()
@@ -437,7 +458,7 @@ class RecordService : Service() {
     // ---------------------------------------------------------------- recording
 
     private fun startPart() {
-        if (stopped || recorder != null) return
+        if (stopped || recorder != null || stopIfSessionExpired()) return
         val id = pickCamera() ?: return fail("No camera found")
         val cam = camera
         if (cam == null || cameraId != id) {
@@ -479,16 +500,18 @@ class RecordService : Service() {
                         }
                         val built = req.build()
                         repeating = built
+                        if (stopIfSessionExpired()) return
                         s.setRepeatingRequest(built, null, h)
                         mr.start()
                         recStarted = true
+                        partStartElapsed = SystemClock.elapsedRealtime()
+                        if (stopIfSessionExpired()) return
                         isRecordingActive = true
                         paused = false
                         isPaused = false
                         pauseError = null
                         pausedTotalMs = 0L
                         part++
-                        partStartElapsed = SystemClock.elapsedRealtime()
                         partStartWall = System.currentTimeMillis()
                         status = "Recording"
                         AppLog.add("CAMERA", "RECORDING_STARTED")
@@ -731,7 +754,7 @@ class RecordService : Service() {
 
     /** Cancel the pending pause, or resume the current recording in the same file. */
     private fun requestResume() {
-        if (stopped || !isRunning) return
+        if (stopped || !isRunning || stopIfSessionExpired()) return
         if (pauseWhenReady) {
             pauseWhenReady = false
             isPausePending = false
@@ -789,7 +812,7 @@ class RecordService : Service() {
 
     /** 30 minutes reached: save this part and immediately begin the next one. */
     private fun rollover() {
-        if (stopped || recorder == null) return
+        if (stopped || recorder == null || stopIfSessionExpired()) return
         finishPart()
         startPart()
     }
@@ -881,7 +904,7 @@ class RecordService : Service() {
     }
 
     private fun retryLater(msg: String) {
-        if (stopped) return
+        if (stopped || stopIfSessionExpired()) return
         AppLog.add("CAMERA", "CAPTURE_RETRY_SCHEDULED")
         status = msg
         updateNotification()
@@ -896,10 +919,15 @@ class RecordService : Service() {
         shutdown(userStopped = false)
     }
 
-    private fun shutdown(userStopped: Boolean, discardCurrent: Boolean = false) {
+    private fun shutdown(userStopped: Boolean, discardCurrent: Boolean = false, autoStopped: Boolean = false) {
         if (stopped) return
-        AppLog.add("CAMERA", if (userStopped) "USER_STOP" else "SAFETY_SHUTDOWN")
+        AppLog.add("CAMERA", when {
+            autoStopped -> "AUTO_STOP"
+            userStopped -> "USER_STOP"
+            else -> "SAFETY_SHUTDOWN"
+        })
         stopped = true
+        sessionLimit = null
         h.removeCallbacksAndMessages(null)
         pauseWhenReady = false
         isPausePending = false
@@ -915,7 +943,14 @@ class RecordService : Service() {
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
-            if (userStopped) {
+            if (autoStopped) {
+                val message = when (saved) {
+                    0 -> "BCam reached the recording limit. No video was saved."
+                    1 -> "BCam reached the recording limit and saved 1 video."
+                    else -> "BCam reached the recording limit and saved $saved videos."
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            } else if (userStopped) {
                 val where = if (Build.VERSION.SDK_INT >= 29) "Movies/BCam" else "Android/data/com.bcam.app/files/Movies/BCam"
                 val msg = if (saved == 1) "BCam saved 1 video to $where" else "BCam saved $saved videos to $where"
                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show()

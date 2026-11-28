@@ -290,6 +290,8 @@ internal fun BCamMaterialScreen(activity: ComponentActivity, startUpdates: Boole
                         (VideoSettings.AUTO_STOP_OPTIONS + settings.autoStopMinutes).distinct().map { if (it == 0) "Unlimited" else "$it min" }) {
                         settings = settings.copy(autoStopMinutes = if (it == "Unlimited") 0 else it.substringBefore(" ").toInt())
                     }
+                    Text("The limit applies to the whole session, including pauses and file changes.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val mb = settings.estimatedPartBytes(settings.preferHevc) / 1_000_000.0
                     Text("Estimated ${String.format(Locale.US, "%.0f", mb)} MB per ${settings.segmentMinutes}-minute file",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

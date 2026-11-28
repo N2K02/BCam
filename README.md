@@ -15,12 +15,12 @@ Background video recorder for Android. No screen, no preview — tap the icon an
 | Tap the **BCam** icon | Recording starts in the background (screen closes immediately) |
 | Notification → **❚❚ Pause / ▶ Resume** | Pauses recording and continues later in the same video file |
 | Notification → **■ Stop** | Stops and saves the current video |
-| Notification → **⚙ Settings** (or tap the notification) | Video settings, **Camera: back / front**, the Updates card and **Exit BCam** |
+| Notification → **⚙ Settings** (or tap the notification) | Stops and saves the recording, then opens video settings, **Camera: back / front**, the Updates card and **Exit BCam** |
 | Every **30 minutes** (adjustable) | The current file is saved and a new one starts automatically, until you press Stop |
 
 ## Video settings
 
-- **Camera**: back or front. While recording, the video so far is saved and recording continues with the other camera in a new file (the two cameras record at different angles and sizes, so they can't share one file).
+- **Camera**: back or front. When switching cameras from the recording controls, the video so far is saved and recording continues with the other camera in a new file (the two cameras record at different angles and sizes, so they can't share one file).
 - **Exit BCam** (bottom of Settings): stops and saves the recording and closes BCam.
 
 Tap **⚙ Settings** in the recording notification (or the notification itself) to choose:
@@ -33,8 +33,11 @@ Tap **⚙ Settings** in the recording notification (or the notification itself) 
 | Codec | H.265 (smaller) · H.264 (plays everywhere) | H.265 |
 | Sound | On · Off | On |
 | New file every | 10 · 15 · 30 · 60 min | 30 min |
+| Auto-stop after | 5 · 10 · 15 · 30 · 45 · 60 min · Unlimited | 15 min |
 
-The dialog shows the estimated size per file. If you save while recording, the current file is kept and a new one starts with the new settings. Settings are remembered for next time.
+Settings shows the estimated size per file. Opening Settings from the recording notification stops and saves the current recording. Changes apply when you start again.
+
+Auto-stop ends the whole recording session and saves the current video. The timer starts when you start a session and keeps counting during pauses, camera changes, and file changes. Unlimited disables the timer, not storage or battery safety stops.
 
 - **Format:** MP4 with **H.265 / HEVC** video (about half the size of H.264 at the same quality) + AAC audio. If the phone has no hardware HEVC encoder, it falls back to H.264.
 - **Quality (default):** up to 1080p at 30 fps, ~5 Mbps → roughly **1.1 GB per 30-minute part** (H.265). Change it in ⚙ Settings.
